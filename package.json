@@ -1,0 +1,25 @@
+{
+  "name": "@tuzuminami/tether",
+  "version": "0.1.0",
+  "description": "Deterministic persona contract compiler foundation for TETHER.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "bin": {
+    "tether": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "check:private-boundary": "node scripts/check-private-boundary.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
+    "verify": "npm run check:private-boundary && npm run build && npm test"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}
