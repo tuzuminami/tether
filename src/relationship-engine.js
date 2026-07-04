@@ -31,6 +31,12 @@ export class RelationshipService {
     requireScope(context, "model:write");
     const model = parseRelationshipModel(input);
     const now = this.now();
+    const key = this.store.modelKey(context.tenantId, model.id, model.version);
+    if (this.store.models.has(key)) {
+      throw new TetherError("RESOURCE_IMMUTABLE", "Relationship model version already exists.", [
+        "published model versions are immutable"
+      ]);
+    }
     const record = {
       ...model,
       tenantId: context.tenantId,
@@ -38,20 +44,30 @@ export class RelationshipService {
       createdBy: context.actorId,
       resourceVersion: 1
     };
-    this.store.models.set(this.store.modelKey(context.tenantId, model.id, model.version), record);
+    this.store.models.set(key, record);
     this.appendAudit(context, "relationship_model.created", model.id, { modelVersion: model.version });
     return record;
   }
 
   createRelationship(context, input) {
     requireScope(context, "relationship:write");
-    const model = this.getModel(context, input.modelId, input.modelVersion);
+    const modelId = readRequiredInputString(input, "modelId");
+    const modelVersion = readRequiredInputString(input, "modelVersion");
+    const subjectRef = readRequiredInputString(input, "subjectRef");
+    const model = this.getModel(context, modelId, modelVersion);
     const now = this.now();
     const values = Object.fromEntries(model.axes.map((axis) => [axis.id, axis.initial]));
+    const relationshipId = readInputString(input, "id") ?? this.idGenerator();
+    const key = this.store.relationshipKey(context.tenantId, relationshipId);
+    if (this.store.relationships.has(key)) {
+      throw new TetherError("RESOURCE_IMMUTABLE", "Relationship already exists.", [
+        "relationship ids are immutable within a tenant"
+      ]);
+    }
     const relationship = {
-      id: readInputString(input, "id") ?? this.idGenerator(),
+      id: relationshipId,
       tenantId: context.tenantId,
-      subjectRef: readInputString(input, "subjectRef"),
+      subjectRef,
       modelId: model.id,
       modelVersion: model.version,
       snapshot: {
@@ -66,7 +82,7 @@ export class RelationshipService {
       createdBy: context.actorId,
       updatedAt: now
     };
-    this.store.relationships.set(this.store.relationshipKey(context.tenantId, relationship.id), relationship);
+    this.store.relationships.set(key, relationship);
     this.appendAudit(context, "relationship.created", relationship.id, { modelId: model.id, modelVersion: model.version });
     this.appendOutbox(context, "tether.relationship.created.v1", relationship.id, { snapshotVersion: 1 });
     return relationship;
@@ -261,6 +277,14 @@ function readInputString(input, key) {
   }
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new TetherError("VALIDATION_FAILED", `${key} must be a non-empty string.`, []);
+  }
+  return value;
+}
+
+function readRequiredInputString(input, key) {
+  const value = readInputString(input, key);
+  if (value === undefined) {
+    throw new TetherError("VALIDATION_FAILED", `${key} is required.`, [`${key} must be a non-empty string`]);
   }
   return value;
 }

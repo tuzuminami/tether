@@ -4,7 +4,7 @@ TETHER is an explainable relationship state engine for AI products, games, educa
 
 It models relationship state as explicit versioned data: axes, bounded values, declared events, transition rules, boundary rules, deterministic decay, snapshots, and explanations. It does not infer real human emotions, diagnose users, optimize dependency, or mutate state from opaque model output.
 
-## Current MVP
+## Current Capabilities
 
 - Relationship model validation with axes, events, transition rules, boundary rules, and decay rules.
 - Fail-closed rejection for undefined events, out-of-range declarations, and positive state progression from boundary-blocked events.
@@ -123,4 +123,4 @@ TETHER stores hashes and identifiers for event evidence in explanations; avoid s
 
 ## License
 
-Apache-2.0. See [LICENSE.md](LICENSE.md).
+Apache-2.0. See [LICENSE](LICENSE).

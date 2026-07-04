@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { cpSync, mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 rmSync("dist", { recursive: true, force: true });
@@ -13,7 +13,9 @@ for (const entry of readdirSync("src", { withFileTypes: true })) {
 }
 
 const cliPath = join("dist", "cli.js");
-const cli = readFileSync(cliPath, "utf8");
-writeFileSync(cliPath, cli.startsWith("#!") ? cli : `#!/usr/bin/env node\n${cli}`);
+if (existsSync(cliPath)) {
+  const cli = readFileSync(cliPath, "utf8");
+  writeFileSync(cliPath, cli.startsWith("#!") ? cli : `#!/usr/bin/env node\n${cli}`);
+}
 
 console.log("build: copied JavaScript sources to dist");

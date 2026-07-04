@@ -140,3 +140,35 @@ test("TEST-TETHER-004 enforces tenant scope and deterministic decay preview", ()
     (error) => error instanceof TetherError && error.code === "TENANT_SCOPE_DENIED"
   );
 });
+
+test("TEST-TETHER-005 rejects missing relationship fields and duplicate resources", () => {
+  const { service } = createService();
+  const context = createDevelopmentContext();
+  service.createModel(context, model);
+
+  assert.throws(
+    () => service.createModel(context, model),
+    (error) => error instanceof TetherError && error.code === "RESOURCE_IMMUTABLE"
+  );
+  assert.throws(
+    () => service.createRelationship(context, { modelId: "starter-model", modelVersion: "1.0.0" }),
+    (error) => error instanceof TetherError && error.code === "VALIDATION_FAILED"
+  );
+
+  service.createRelationship(context, {
+    id: "rel_1",
+    modelId: "starter-model",
+    modelVersion: "1.0.0",
+    subjectRef: "subject_hash_demo"
+  });
+  assert.throws(
+    () =>
+      service.createRelationship(context, {
+        id: "rel_1",
+        modelId: "starter-model",
+        modelVersion: "1.0.0",
+        subjectRef: "subject_hash_demo"
+      }),
+    (error) => error instanceof TetherError && error.code === "RESOURCE_IMMUTABLE"
+  );
+});

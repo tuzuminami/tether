@@ -6,50 +6,52 @@ export function createTetherHttpServer(options = {}) {
   const store = options.store ?? new InMemoryRelationshipStore();
   const service = options.service ?? new RelationshipService(store, options.serviceOptions);
 
-  return createServer(async (request, response) => {
-    const correlationId = request.headers["x-correlation-id"]?.toString() ?? `corr_${crypto.randomUUID()}`;
-    try {
-      const context = authenticate(request, correlationId);
-      const url = new URL(request.url ?? "/", "http://127.0.0.1");
-      const route = matchRoute(request.method ?? "GET", url.pathname);
+  return createServer((request, response) => handleTetherHttpRequest(service, request, response));
+}
 
-      if (route.name === "health") {
-        send(response, 200, { data: { status: "ok" }, meta: meta(correlationId) });
-        return;
-      }
-      if (route.name === "createModel") {
-        const data = service.createModel(context, await readJson(request));
-        send(response, 201, { data, meta: meta(correlationId) });
-        return;
-      }
-      if (route.name === "createRelationship") {
-        const data = service.createRelationship(context, await readJson(request));
-        send(response, 201, { data, meta: meta(correlationId) });
-        return;
-      }
-      if (route.name === "applyEvent") {
-        const idempotencyKey = request.headers["idempotency-key"]?.toString();
-        const data = service.applyEvent(context, route.params.relationshipId, await readJson(request), idempotencyKey);
-        send(response, 200, { data, meta: meta(correlationId) });
-        return;
-      }
-      if (route.name === "explanation") {
-        const data = service.getExplanation(context, route.params.relationshipId);
-        send(response, 200, { data, meta: meta(correlationId) });
-        return;
-      }
-      if (route.name === "decayPreview") {
-        const body = await readJson(request);
-        const data = service.previewDecay(context, route.params.relationshipId, body.baselineAt);
-        send(response, 200, { data, meta: meta(correlationId) });
-        return;
-      }
+export async function handleTetherHttpRequest(service, request, response) {
+  const correlationId = request.headers["x-correlation-id"]?.toString() ?? `corr_${crypto.randomUUID()}`;
+  try {
+    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    const route = matchRoute(request.method ?? "GET", url.pathname);
 
-      sendError(response, correlationId, new TetherError("RESOURCE_NOT_FOUND", "Route was not found.", []));
-    } catch (error) {
-      sendError(response, correlationId, error);
+    if (route.name === "health") {
+      send(response, 200, { data: { status: "ok" }, meta: meta(correlationId) });
+      return;
     }
-  });
+    const context = authenticate(request, correlationId);
+    if (route.name === "createModel") {
+      const data = service.createModel(context, await readJson(request));
+      send(response, 201, { data, meta: meta(correlationId) });
+      return;
+    }
+    if (route.name === "createRelationship") {
+      const data = service.createRelationship(context, await readJson(request));
+      send(response, 201, { data, meta: meta(correlationId) });
+      return;
+    }
+    if (route.name === "applyEvent") {
+      const idempotencyKey = request.headers["idempotency-key"]?.toString();
+      const data = service.applyEvent(context, route.params.relationshipId, await readJson(request), idempotencyKey);
+      send(response, 200, { data, meta: meta(correlationId) });
+      return;
+    }
+    if (route.name === "explanation") {
+      const data = service.getExplanation(context, route.params.relationshipId);
+      send(response, 200, { data, meta: meta(correlationId) });
+      return;
+    }
+    if (route.name === "decayPreview") {
+      const body = await readJson(request);
+      const data = service.previewDecay(context, route.params.relationshipId, body.baselineAt);
+      send(response, 200, { data, meta: meta(correlationId) });
+      return;
+    }
+
+    sendError(response, correlationId, new TetherError("RESOURCE_NOT_FOUND", "Route was not found.", []));
+  } catch (error) {
+    sendError(response, correlationId, error);
+  }
 }
 
 export function createDefaultApiRuntime() {

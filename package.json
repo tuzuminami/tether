@@ -1,20 +1,17 @@
 {
   "name": "@tuzuminami/tether",
   "version": "0.1.0",
-  "description": "Deterministic persona contract compiler foundation for TETHER.",
+  "description": "Explainable relationship state engine for AI products and interactive systems.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
-  "bin": {
-    "tether": "./dist/cli.js"
-  },
   "files": [
     "dist",
     "apps/api",
     "openapi",
     "examples",
     "README.md",
-    "LICENSE.md",
+    "LICENSE",
     "SECURITY.md"
   ],
   "scripts": {
