@@ -1,0 +1,51 @@
+{
+  "id": "starter-model",
+  "version": "1.0.0",
+  "axes": [
+    {
+      "id": "trust",
+      "min": 0,
+      "max": 100,
+      "initial": 50
+    }
+  ],
+  "events": [
+    {
+      "type": "helpful_interaction"
+    },
+    {
+      "type": "boundary_violation"
+    }
+  ],
+  "transitionRules": [
+    {
+      "id": "trust-helpful",
+      "eventType": "helpful_interaction",
+      "axis": "trust",
+      "delta": 8,
+      "reasonCode": "HELPFUL"
+    },
+    {
+      "id": "trust-boundary",
+      "eventType": "boundary_violation",
+      "axis": "trust",
+      "delta": -12,
+      "reasonCode": "BOUNDARY"
+    }
+  ],
+  "boundaryRules": [
+    {
+      "id": "boundary-no-positive-trust",
+      "eventType": "boundary_violation",
+      "axis": "trust",
+      "blocksPositiveDelta": true,
+      "policyRef": "policy://boundary/default"
+    }
+  ],
+  "decayRules": [
+    {
+      "axis": "trust",
+      "perDay": 2
+    }
+  ]
+}

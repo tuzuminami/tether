@@ -10,12 +10,17 @@
   },
   "files": [
     "dist",
+    "apps/api",
+    "openapi",
+    "examples",
     "README.md",
-    "LICENSE.md"
+    "LICENSE.md",
+    "SECURITY.md"
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
     "check:private-boundary": "node scripts/check-private-boundary.mjs",
+    "start": "node apps/api/server.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "verify": "npm run check:private-boundary && npm run build && npm test"
   },
