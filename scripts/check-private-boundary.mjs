@@ -33,6 +33,21 @@ function fail(message) {
   process.exit(1);
 }
 
+function inspectPackageFiles() {
+  const output = execFileSync("npm", ["pack", "--dry-run", "--json"], {
+    encoding: "utf8",
+    env: { ...process.env, npm_config_cache: "/tmp/tether-npm-cache" },
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+  const packages = JSON.parse(output);
+  const files = packages.flatMap((entry) => entry.files.map((file) => file.path));
+  const rejected = files.filter((file) => prohibitedPathPatterns.some((pattern) => pattern.test(file)));
+  if (rejected.length > 0) {
+    fail(`prohibited package paths: ${rejected.join(", ")}`);
+  }
+  return files.length;
+}
+
 let files;
 try {
   const tracked = git(["ls-files"]).filter((file) => !git(["ls-files", "--deleted"]).includes(file));
@@ -66,4 +81,11 @@ for (const file of files) {
   }
 }
 
-console.log(`private-boundary: ok (${files.length} tracked/staged files scanned)`);
+let packageFileCount = 0;
+try {
+  packageFileCount = inspectPackageFiles();
+} catch (error) {
+  fail(`cannot inspect npm package files: ${error instanceof Error ? error.message : String(error)}`);
+}
+
+console.log(`private-boundary: ok (${files.length} tracked/staged files scanned, ${packageFileCount} package files scanned)`);

@@ -16,6 +16,9 @@ It models relationship state as explicit versioned data: axes, bounded values, d
 - Public boundary guard to prevent private operator material from being committed.
 - Strict TypeScript source, declaration output, and typecheck gate.
 - PostgreSQL persistence adapter with migrations and transaction-backed idempotency, audit, and outbox writes.
+- JSON Schema contract artifacts with fail-closed HTTP request validation.
+- Non-mutating relationship event simulation API.
+- Docker Compose development stack and E2E smoke script.
 
 ## Non-Goals
 
@@ -63,6 +66,16 @@ curl -sS http://localhost:3000/v1/relationships/rel_demo/events \
   --data '{"id":"evt_demo_1","type":"helpful_interaction","payload":{"sourceRef":"message_hash_demo"}}'
 ```
 
+Simulate an event without mutating state:
+
+```bash
+curl -sS http://localhost:3000/v1/relationships/rel_demo/simulate \
+  -H 'Authorization: Bearer dev-token' \
+  -H 'X-Tenant-Id: tenant_demo' \
+  -H 'Content-Type: application/json' \
+  --data '{"event":{"id":"evt_sim_1","type":"helpful_interaction"}}'
+```
+
 ## JavaScript Usage
 
 ```js
@@ -102,6 +115,17 @@ await store.migrate();
 
 `PostgresRelationshipStore` uses the same checked-out PostgreSQL client for each `BEGIN` / `COMMIT` / `ROLLBACK` block, and stores relationship updates, idempotency records, audit events, and outbox events in one transaction. Call `await store.close()` during shutdown.
 
+`rollbackForDevelopment()` is provided for disposable local environments and tests. Production rollback should follow an expand/deploy/backfill/contract plan and restore from backups where destructive rollback would lose data.
+
+## Docker Compose
+
+```bash
+docker compose up --build
+TETHER_BASE_URL=http://127.0.0.1:3000 npm run e2e:smoke
+```
+
+The compose stack starts PostgreSQL and the API. The API applies PostgreSQL migrations when `TETHER_MIGRATE_POSTGRES=1`; the default HTTP runtime remains in-memory for deterministic local development.
+
 ## API Contract
 
 See [openapi/openapi.yaml](openapi/openapi.yaml).
@@ -117,10 +141,12 @@ Protected endpoints require:
 
 ```bash
 npm run check:private-boundary
+npm run check:licenses
 npm run typecheck
 npm run build
 npm test
 npm run verify
+npm run release:check
 ```
 
 `npm test` opens a local HTTP listener for API tests. In restricted sandboxes, run it with permission for local loopback binding.
@@ -134,8 +160,12 @@ TETHER stores hashes and identifiers for event evidence in explanations; avoid s
 ## Known Limitations
 
 - The development HTTP server still uses the in-memory store by default; production deployments should wire the PostgreSQL adapter or another durable store explicitly.
-- The API is v0.1 and may change before a tagged stable release.
+- The API is v0.2 and may change before a tagged stable release.
 - The development bearer-token adapter is intentionally minimal and must be replaced before internet exposure.
+
+## Operations
+
+See [docs/OPERATIONS.md](docs/OPERATIONS.md) and [docs/RELEASE.md](docs/RELEASE.md).
 
 ## License
 

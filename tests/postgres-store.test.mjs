@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PostgresRelationshipStore, TetherError } from "../dist/index.js";
+import {
+  PostgresRelationshipStore,
+  TETHER_POSTGRES_MIGRATIONS,
+  TETHER_POSTGRES_ROLLBACK_MIGRATIONS,
+  TetherError
+} from "../dist/index.js";
 
 const relationship = {
   id: "rel_pg",
@@ -149,6 +154,22 @@ test("TEST-PG-003 rolls back and maps unique violations to immutable resource er
   assert.equal(client.queries[0].text, "BEGIN");
   assert.equal(client.queries.at(-1).text, "ROLLBACK");
   assert.equal(client.released, true);
+});
+
+test("TEST-PG-004 exposes upgrade and rollback migration statements", async () => {
+  assert.equal(TETHER_POSTGRES_MIGRATIONS.length >= 5, true);
+  assert.equal(TETHER_POSTGRES_ROLLBACK_MIGRATIONS.length >= 5, true);
+  assert.equal(TETHER_POSTGRES_ROLLBACK_MIGRATIONS[0].startsWith("DROP INDEX"), true);
+  assert.equal(TETHER_POSTGRES_ROLLBACK_MIGRATIONS.at(-1), "DROP TABLE IF EXISTS tether_relationship_models");
+
+  const pool = new FakePool(new FakeClient());
+  const store = new PostgresRelationshipStore(pool);
+  await store.migrate();
+  await store.rollbackForDevelopment();
+
+  assert.equal(pool.queries.length, TETHER_POSTGRES_MIGRATIONS.length + TETHER_POSTGRES_ROLLBACK_MIGRATIONS.length);
+  assert.equal(pool.queries[0].text.startsWith("CREATE TABLE IF NOT EXISTS tether_relationship_models"), true);
+  assert.equal(pool.queries.at(-1).text, "DROP TABLE IF EXISTS tether_relationship_models");
 });
 
 class FakePool {

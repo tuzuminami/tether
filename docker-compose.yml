@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tether
+      POSTGRES_USER: tether
+      POSTGRES_PASSWORD: tether_dev_password
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tether -d tether"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  api:
+    build: .
+    environment:
+      PORT: "3000"
+      DATABASE_URL: postgres://tether:tether_dev_password@postgres:5432/tether
+      TETHER_MIGRATE_POSTGRES: "1"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy

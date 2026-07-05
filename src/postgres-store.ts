@@ -1,4 +1,4 @@
-import { Pool, type PoolClient, type PoolConfig, type QueryResult, type QueryResultRow } from "pg";
+import { Pool, type PoolConfig, type QueryResult, type QueryResultRow } from "pg";
 import { TetherError } from "./errors.js";
 import type {
   ApplyEventResult,
@@ -66,6 +66,17 @@ export const TETHER_POSTGRES_MIGRATIONS: readonly string[] = [
     WHERE published_at IS NULL`
 ];
 
+export const TETHER_POSTGRES_ROLLBACK_MIGRATIONS: readonly string[] = [
+  "DROP INDEX IF EXISTS tether_outbox_events_unpublished_idx",
+  "DROP INDEX IF EXISTS tether_audit_events_tenant_resource_idx",
+  "DROP INDEX IF EXISTS tether_relationships_tenant_model_idx",
+  "DROP TABLE IF EXISTS tether_outbox_events",
+  "DROP TABLE IF EXISTS tether_audit_events",
+  "DROP TABLE IF EXISTS tether_idempotency_keys",
+  "DROP TABLE IF EXISTS tether_relationships",
+  "DROP TABLE IF EXISTS tether_relationship_models"
+];
+
 export interface PostgresEventApplication {
   relationship: RelationshipRecord;
   explanation: ApplyEventResult["explanation"];
@@ -106,6 +117,12 @@ export class PostgresRelationshipStore {
 
   async migrate(): Promise<void> {
     for (const statement of TETHER_POSTGRES_MIGRATIONS) {
+      await this.pool.query(statement);
+    }
+  }
+
+  async rollbackForDevelopment(): Promise<void> {
+    for (const statement of TETHER_POSTGRES_ROLLBACK_MIGRATIONS) {
       await this.pool.query(statement);
     }
   }

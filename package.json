@@ -1,6 +1,6 @@
 {
   "name": "@tuzuminami/tether",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Explainable relationship state engine for AI products and interactive systems.",
   "license": "Apache-2.0",
   "type": "module",
@@ -9,6 +9,8 @@
   "files": [
     "dist",
     "apps/api",
+    "docs/OPERATIONS.md",
+    "docs/RELEASE.md",
     "openapi",
     "examples",
     "README.md",
@@ -17,11 +19,14 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "check:licenses": "node scripts/check-licenses.mjs",
     "check:private-boundary": "node scripts/check-private-boundary.mjs",
+    "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "release:check": "npm run verify && npm run check:licenses && npm audit --audit-level=high && npm_config_cache=/tmp/tether-npm-cache npm pack --dry-run",
     "start": "node apps/api/server.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "verify": "npm run check:private-boundary && npm run typecheck && npm test"
+    "verify": "npm run check:private-boundary && npm run typecheck && npm test && npm run e2e:smoke"
   },
   "engines": {
     "node": ">=22.6"
