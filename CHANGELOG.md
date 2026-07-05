@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 - Unreleased
+## 0.1.0 - 2026-07-05
 
 - Added relationship model validation and event application core flow.
 - Added idempotent snapshot updates with explanations, audit events, and outbox events.
