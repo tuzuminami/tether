@@ -172,3 +172,35 @@ test("TEST-TETHER-005 rejects missing relationship fields and duplicate resource
     (error) => error instanceof TetherError && error.code === "RESOURCE_IMMUTABLE"
   );
 });
+
+test("TEST-TETHER-006 rejects out-of-range models and clamps event transitions", () => {
+  const { service } = createService();
+  const context = createDevelopmentContext();
+
+  assert.throws(
+    () =>
+      service.createModel(context, {
+        ...model,
+        axes: [{ id: "trust", min: 0, max: 100, initial: 101 }]
+      }),
+    (error) => error instanceof TetherError && error.code === "VALIDATION_FAILED"
+  );
+
+  service.createModel(context, {
+    ...model,
+    transitionRules: [
+      { id: "trust-huge", eventType: "helpful_interaction", axis: "trust", delta: 500, reasonCode: "HELPFUL" },
+      model.transitionRules[1]
+    ]
+  });
+  service.createRelationship(context, {
+    id: "rel_clamp",
+    modelId: "starter-model",
+    modelVersion: "1.0.0",
+    subjectRef: "subject_hash_demo"
+  });
+
+  const result = service.applyEvent(context, "rel_clamp", { id: "evt_clamp", type: "helpful_interaction" }, "idem_clamp");
+  assert.equal(result.relationship.snapshot.values.trust, 100);
+  assert.equal(result.explanation.after.trust, 100);
+});

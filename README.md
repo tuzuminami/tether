@@ -149,7 +149,7 @@ npm run verify
 npm run release:check
 ```
 
-`npm test` opens a local HTTP listener for API tests. In restricted sandboxes, run it with permission for local loopback binding.
+`npm test` exercises the HTTP handler in process, so it does not require a local listener. `npm run e2e:smoke` can target a live server by setting `TETHER_BASE_URL`.
 
 ## Security Model
 
