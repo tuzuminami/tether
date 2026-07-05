@@ -2,6 +2,14 @@ import { randomUUID } from "node:crypto";
 import { createServer, type IncomingHttpHeaders, type Server, type ServerResponse } from "node:http";
 import { InMemoryRelationshipStore, RelationshipService, createDevelopmentContext } from "./relationship-engine.js";
 import { TetherError } from "./errors.js";
+import {
+  createRelationshipSchema,
+  decayPreviewSchema,
+  relationshipEventSchema,
+  relationshipModelSchema,
+  simulateRelationshipEventSchema
+} from "./schemas.js";
+import { assertValidSchemaInput } from "./schema-validator.js";
 import type { TetherErrorCode } from "./types.js";
 
 export interface TetherHttpServerOptions {
@@ -25,6 +33,7 @@ type Route =
   | { name: "applyEvent"; params: { relationshipId: string } }
   | { name: "explanation"; params: { relationshipId: string } }
   | { name: "decayPreview"; params: { relationshipId: string } }
+  | { name: "simulate"; params: { relationshipId: string } }
   | { name: "notFound"; params: Record<string, never> };
 
 export function createTetherHttpServer(options: TetherHttpServerOptions = {}): Server {
@@ -52,12 +61,16 @@ export async function handleTetherHttpRequest(
     }
     const context = authenticate(request, correlationId);
     if (route.name === "createModel") {
-      const data = service.createModel(context, await readJson(request));
+      const body = await readJson(request);
+      assertValidSchemaInput("RelationshipModel", relationshipModelSchema, body);
+      const data = service.createModel(context, body);
       send(response, 201, { data, meta: meta(correlationId) });
       return;
     }
     if (route.name === "createRelationship") {
-      const data = service.createRelationship(context, await readJson(request));
+      const body = await readJson(request);
+      assertValidSchemaInput("CreateRelationshipRequest", createRelationshipSchema, body);
+      const data = service.createRelationship(context, body);
       send(response, 201, { data, meta: meta(correlationId) });
       return;
     }
@@ -67,6 +80,7 @@ export async function handleTetherHttpRequest(
       if (!isRecord(body)) {
         throw new TetherError("VALIDATION_FAILED", "Request body must be a JSON object.", []);
       }
+      assertValidSchemaInput("RelationshipEventRequest", relationshipEventSchema, body);
       const data = service.applyEvent(context, route.params.relationshipId, body, idempotencyKey);
       send(response, 200, { data, meta: meta(correlationId) });
       return;
@@ -78,10 +92,21 @@ export async function handleTetherHttpRequest(
     }
     if (route.name === "decayPreview") {
       const body = await readJson(request);
+      assertValidSchemaInput("DecayPreviewRequest", decayPreviewSchema, body);
       if (!isRecord(body) || typeof body.baselineAt !== "string") {
         throw new TetherError("VALIDATION_FAILED", "baselineAt must be an ISO timestamp.", []);
       }
       const data = service.previewDecay(context, route.params.relationshipId, body.baselineAt);
+      send(response, 200, { data, meta: meta(correlationId) });
+      return;
+    }
+    if (route.name === "simulate") {
+      const body = await readJson(request);
+      assertValidSchemaInput("SimulateRelationshipEventRequest", simulateRelationshipEventSchema, body);
+      if (!isRecord(body) || !isRecord(body.event)) {
+        throw new TetherError("VALIDATION_FAILED", "event must be a JSON object.", []);
+      }
+      const data = service.simulateEvent(context, route.params.relationshipId, body.event);
       send(response, 200, { data, meta: meta(correlationId) });
       return;
     }
@@ -135,6 +160,10 @@ function matchRoute(method: string, pathname: string): Route {
   const decayMatch = pathname.match(/^\/v1\/relationships\/([^/]+)\/decay-preview$/);
   if (method === "POST" && decayMatch?.[1] !== undefined) {
     return { name: "decayPreview", params: { relationshipId: decodeURIComponent(decayMatch[1]) } };
+  }
+  const simulateMatch = pathname.match(/^\/v1\/relationships\/([^/]+)\/simulate$/);
+  if (method === "POST" && simulateMatch?.[1] !== undefined) {
+    return { name: "simulate", params: { relationshipId: decodeURIComponent(simulateMatch[1]) } };
   }
   return { name: "notFound", params: {} };
 }

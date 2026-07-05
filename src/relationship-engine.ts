@@ -13,6 +13,7 @@ import type {
   RelationshipExplanationWarning,
   RelationshipRecord,
   RequestContext,
+  SimulateEventResult,
   StoredRelationshipModel,
   TetherScope
 } from "./types.js";
@@ -131,76 +132,44 @@ export class RelationshipService {
     }
 
     const relationship = this.getRelationship(context, relationshipId);
-    const model = this.getModel(context, relationship.modelId, relationship.modelVersion);
-    const eventType = readInputString(event, "type");
-    const eventId = readInputString(event, "id") ?? this.idGenerator();
-    if (eventType === undefined || !model.events.some((declaredEvent) => declaredEvent.type === eventType)) {
-      throw new TetherError("VALIDATION_FAILED", "Relationship event validation failed.", [
-        `event type ${eventType ?? "<missing>"} is not declared by the model`
-      ]);
-    }
-
-    const before = { ...relationship.snapshot.values };
-    const matchingRules = model.transitionRules.filter((rule) => rule.eventType === eventType);
-    const appliedRules: string[] = [];
-    const warnings: RelationshipExplanationWarning[] = [];
-    const after = { ...before };
-
-    for (const rule of matchingRules) {
-      const axis = model.axes.find((candidate) => candidate.id === rule.axis);
-      if (axis === undefined) {
-        throw new TetherError("VALIDATION_FAILED", "Transition rule references an unknown axis.", [rule.axis]);
-      }
-      const boundary = model.boundaryRules.find(
-        (candidate) => candidate.eventType === eventType && candidate.axis === rule.axis && candidate.blocksPositiveDelta
-      );
-      if (boundary !== undefined && rule.delta > 0) {
-        warnings.push({ boundaryRuleId: boundary.id, policyRef: boundary.policyRef, reasonCode: "BOUNDARY_BLOCKED" });
-        continue;
-      }
-      after[rule.axis] = clamp((after[rule.axis] ?? axis.initial) + rule.delta, axis.min, axis.max);
-      appliedRules.push(rule.id);
-    }
-
-    const createdAt = this.now();
-    const explanation: RelationshipExplanation = {
-      id: this.idGenerator(),
-      relationshipId,
-      snapshotVersion: relationship.snapshot.version + 1,
-      eventId,
-      eventType,
-      eventHash: sha256Hex(canonicalJson({ id: eventId, type: eventType, payload: event.payload ?? null })),
-      ruleIds: appliedRules,
-      before,
-      after,
-      warnings,
-      reasonCode: appliedRules.length > 0 ? "TRANSITION_APPLIED" : "NO_TRANSITION_APPLIED",
-      createdAt
-    };
+    const { after, explanation } = this.projectEvent(relationship, event);
 
     relationship.snapshot = {
       version: relationship.snapshot.version + 1,
       values: after,
-      modelId: model.id,
-      modelVersion: model.version,
-      updatedAt: createdAt
+      modelId: relationship.modelId,
+      modelVersion: relationship.modelVersion,
+      updatedAt: explanation.createdAt
     };
-    relationship.updatedAt = createdAt;
+    relationship.updatedAt = explanation.createdAt;
     relationship.explanations = [...relationship.explanations, explanation];
 
     this.appendAudit(context, "relationship.event_applied", relationshipId, {
       snapshotVersion: relationship.snapshot.version,
-      eventType,
+      eventType: explanation.eventType,
       eventHash: explanation.eventHash
     });
     this.appendOutbox(context, "tether.relationship.event-applied.v1", relationshipId, {
       snapshotVersion: relationship.snapshot.version,
-      eventType
+      eventType: explanation.eventType
     });
 
     const result = { relationship, explanation };
     this.store.idempotency.set(idempotencyScope, { requestHash, result });
     return result;
+  }
+
+  simulateEvent(context: RequestContext, relationshipId: string, event: RelationshipEventInput): SimulateEventResult {
+    requireScope(context, "relationship:read");
+    const relationship = this.getRelationship(context, relationshipId);
+    const { after, explanation } = this.projectEvent(relationship, event);
+    return {
+      relationshipId,
+      fromSnapshotVersion: relationship.snapshot.version,
+      projectedSnapshotVersion: relationship.snapshot.version + 1,
+      explanation,
+      values: after
+    };
   }
 
   getExplanation(context: RequestContext, relationshipId: string): RelationshipExplanation | null {
@@ -276,6 +245,70 @@ export class RelationshipService {
       payload,
       createdAt: this.now()
     });
+  }
+
+  private projectEvent(
+    relationship: RelationshipRecord,
+    event: RelationshipEventInput
+  ): { after: Record<string, number>; explanation: RelationshipExplanation } {
+    const model = this.getModel(
+      {
+        tenantId: relationship.tenantId,
+        actorId: relationship.createdBy,
+        scopes: ["relationship:read"],
+        correlationId: "internal_projection"
+      },
+      relationship.modelId,
+      relationship.modelVersion
+    );
+    const eventType = readInputString(event, "type");
+    const eventId = readInputString(event, "id") ?? this.idGenerator();
+    if (eventType === undefined || !model.events.some((declaredEvent) => declaredEvent.type === eventType)) {
+      throw new TetherError("VALIDATION_FAILED", "Relationship event validation failed.", [
+        `event type ${eventType ?? "<missing>"} is not declared by the model`
+      ]);
+    }
+
+    const before = { ...relationship.snapshot.values };
+    const matchingRules = model.transitionRules.filter((rule) => rule.eventType === eventType);
+    const appliedRules: string[] = [];
+    const warnings: RelationshipExplanationWarning[] = [];
+    const after = { ...before };
+
+    for (const rule of matchingRules) {
+      const axis = model.axes.find((candidate) => candidate.id === rule.axis);
+      if (axis === undefined) {
+        throw new TetherError("VALIDATION_FAILED", "Transition rule references an unknown axis.", [rule.axis]);
+      }
+      const boundary = model.boundaryRules.find(
+        (candidate) => candidate.eventType === eventType && candidate.axis === rule.axis && candidate.blocksPositiveDelta
+      );
+      if (boundary !== undefined && rule.delta > 0) {
+        warnings.push({ boundaryRuleId: boundary.id, policyRef: boundary.policyRef, reasonCode: "BOUNDARY_BLOCKED" });
+        continue;
+      }
+      after[rule.axis] = clamp((after[rule.axis] ?? axis.initial) + rule.delta, axis.min, axis.max);
+      appliedRules.push(rule.id);
+    }
+
+    const createdAt = this.now();
+    return {
+      after,
+      explanation: {
+        id: this.idGenerator(),
+        relationshipId: relationship.id,
+        snapshotVersion: relationship.snapshot.version + 1,
+        eventId,
+        eventType,
+        eventHash: sha256Hex(canonicalJson({ id: eventId, type: eventType, payload: event.payload ?? null })),
+        ruleIds: appliedRules,
+        before,
+        after,
+        warnings,
+        reasonCode: appliedRules.length > 0 ? "TRANSITION_APPLIED" : "NO_TRANSITION_APPLIED",
+        createdAt
+      }
+    };
   }
 }
 

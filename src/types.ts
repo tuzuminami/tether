@@ -152,3 +152,11 @@ export interface DecayPreview {
   fromSnapshotVersion: number;
   values: Record<string, number>;
 }
+
+export interface SimulateEventResult {
+  relationshipId: string;
+  fromSnapshotVersion: number;
+  projectedSnapshotVersion: number;
+  explanation: RelationshipExplanation;
+  values: Record<string, number>;
+}

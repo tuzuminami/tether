@@ -1,30 +1,47 @@
 openapi: 3.1.0
 info:
   title: TETHER API
-  version: 0.1.0
+  version: 0.2.0
   summary: Explainable relationship state engine API.
 servers:
   - url: http://localhost:3000
 paths:
   /health:
     get:
+      summary: Public liveness probe.
       responses:
         "200":
           description: Health status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEnvelope"
   /v1/models:
     post:
-      summary: Create a relationship model version.
+      summary: Create an immutable relationship model version.
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RelationshipModel"
       responses:
         "201":
           description: Model created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEnvelope"
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "422":
           $ref: "#/components/responses/Error"
@@ -36,12 +53,24 @@ paths:
       parameters:
         - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/CorrelationId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateRelationshipRequest"
       responses:
         "201":
           description: Relationship created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEnvelope"
         "401":
           $ref: "#/components/responses/Error"
         "403":
+          $ref: "#/components/responses/Error"
+        "409":
           $ref: "#/components/responses/Error"
         "422":
           $ref: "#/components/responses/Error"
@@ -54,14 +83,24 @@ paths:
         - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/CorrelationId"
         - $ref: "#/components/parameters/IdempotencyKey"
-        - name: relationshipId
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/RelationshipId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RelationshipEventRequest"
       responses:
         "200":
           description: Event applied or replayed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "409":
           $ref: "#/components/responses/Error"
         "422":
@@ -74,15 +113,49 @@ paths:
       parameters:
         - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/CorrelationId"
-        - name: relationshipId
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/RelationshipId"
       responses:
         "200":
           description: Latest explanation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
         "404":
+          $ref: "#/components/responses/Error"
+  /v1/relationships/{relationshipId}/simulate:
+    post:
+      summary: Simulate a declared event without mutating relationship state.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/CorrelationId"
+        - $ref: "#/components/parameters/RelationshipId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulateRelationshipEventRequest"
+      responses:
+        "200":
+          description: Deterministic simulated transition.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "422":
           $ref: "#/components/responses/Error"
   /v1/relationships/{relationshipId}/decay-preview:
     post:
@@ -92,14 +165,26 @@ paths:
       parameters:
         - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/CorrelationId"
-        - name: relationshipId
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/RelationshipId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecayPreviewRequest"
       responses:
         "200":
           description: Decay preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
         "422":
           $ref: "#/components/responses/Error"
 components:
@@ -126,26 +211,183 @@ components:
       required: true
       schema:
         type: string
+    RelationshipId:
+      name: relationshipId
+      in: path
+      required: true
+      schema:
+        type: string
   responses:
     Error:
       description: Stable error envelope.
       content:
         application/json:
           schema:
-            type: object
-            required: [error]
-            properties:
-              error:
-                type: object
-                required: [code, message, details, correlationId]
-                properties:
-                  code:
-                    type: string
-                  message:
-                    type: string
-                  details:
-                    type: array
-                    items:
-                      type: string
-                  correlationId:
-                    type: string
+            $ref: "#/components/schemas/ErrorEnvelope"
+  schemas:
+    RelationshipModel:
+      type: object
+      additionalProperties: false
+      required: [id, version, axes, events, transitionRules, boundaryRules]
+      properties:
+        id:
+          type: string
+        version:
+          type: string
+        axes:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/RelationshipAxis"
+        events:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/RelationshipEventDeclaration"
+        transitionRules:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/TransitionRule"
+        boundaryRules:
+          type: array
+          items:
+            $ref: "#/components/schemas/BoundaryRule"
+        decayRules:
+          type: array
+          items:
+            $ref: "#/components/schemas/DecayRule"
+    RelationshipAxis:
+      type: object
+      additionalProperties: false
+      required: [id, min, max, initial]
+      properties:
+        id:
+          type: string
+        min:
+          type: number
+        max:
+          type: number
+        initial:
+          type: number
+    RelationshipEventDeclaration:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        type:
+          type: string
+    TransitionRule:
+      type: object
+      additionalProperties: false
+      required: [id, eventType, axis, delta, reasonCode]
+      properties:
+        id:
+          type: string
+        eventType:
+          type: string
+        axis:
+          type: string
+        delta:
+          type: number
+        reasonCode:
+          type: string
+    BoundaryRule:
+      type: object
+      additionalProperties: false
+      required: [id, eventType, axis, policyRef]
+      properties:
+        id:
+          type: string
+        eventType:
+          type: string
+        axis:
+          type: string
+        blocksPositiveDelta:
+          type: boolean
+        policyRef:
+          type: string
+    DecayRule:
+      type: object
+      additionalProperties: false
+      required: [axis, perDay]
+      properties:
+        axis:
+          type: string
+        perDay:
+          type: number
+          minimum: 0
+    CreateRelationshipRequest:
+      type: object
+      additionalProperties: false
+      required: [modelId, modelVersion, subjectRef]
+      properties:
+        id:
+          type: string
+        modelId:
+          type: string
+        modelVersion:
+          type: string
+        subjectRef:
+          type: string
+    RelationshipEventRequest:
+      type: object
+      additionalProperties: false
+      required: [type]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        payload:
+          type: object
+          additionalProperties: true
+    SimulateRelationshipEventRequest:
+      type: object
+      additionalProperties: false
+      required: [event]
+      properties:
+        event:
+          $ref: "#/components/schemas/RelationshipEventRequest"
+        baselineAt:
+          type: string
+    DecayPreviewRequest:
+      type: object
+      additionalProperties: false
+      required: [baselineAt]
+      properties:
+        baselineAt:
+          type: string
+    ResponseEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data: true
+        meta:
+          type: object
+          required: [requestId, correlationId, apiVersion]
+          properties:
+            requestId:
+              type: string
+            correlationId:
+              type: string
+            apiVersion:
+              type: string
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, details, correlationId]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: array
+              items:
+                type: string
+            correlationId:
+              type: string
