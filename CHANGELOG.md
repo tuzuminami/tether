@@ -6,3 +6,5 @@
 - Added idempotent snapshot updates with explanations, audit events, and outbox events.
 - Added development HTTP API and OpenAPI contract.
 - Added private-boundary guard and public repository hygiene files.
+- Restored strict TypeScript source, generated declarations, and typecheck verification.
+- Added PostgreSQL persistence adapter with migrations and same-client transaction tests for idempotency, audit, and outbox writes.

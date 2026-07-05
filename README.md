@@ -14,6 +14,8 @@ It models relationship state as explicit versioned data: axes, bounded values, d
 - Tenant-scoped access checks and stable error codes.
 - Minimal HTTP API with request/response envelopes.
 - Public boundary guard to prevent private operator material from being committed.
+- Strict TypeScript source, declaration output, and typecheck gate.
+- PostgreSQL persistence adapter with migrations and transaction-backed idempotency, audit, and outbox writes.
 
 ## Non-Goals
 
@@ -87,6 +89,19 @@ service.createModel(context, {
 });
 ```
 
+## PostgreSQL Persistence
+
+The default development runtime uses `InMemoryRelationshipStore` so local tests stay deterministic. Production services can use the PostgreSQL adapter for durable persistence and transactional side effects:
+
+```js
+import { PostgresRelationshipStore } from "@tuzuminami/tether";
+
+const store = PostgresRelationshipStore.fromConnectionString(process.env.DATABASE_URL);
+await store.migrate();
+```
+
+`PostgresRelationshipStore` uses the same checked-out PostgreSQL client for each `BEGIN` / `COMMIT` / `ROLLBACK` block, and stores relationship updates, idempotency records, audit events, and outbox events in one transaction. Call `await store.close()` during shutdown.
+
 ## API Contract
 
 See [openapi/openapi.yaml](openapi/openapi.yaml).
@@ -102,6 +117,7 @@ Protected endpoints require:
 
 ```bash
 npm run check:private-boundary
+npm run typecheck
 npm run build
 npm test
 npm run verify
@@ -117,9 +133,9 @@ TETHER stores hashes and identifiers for event evidence in explanations; avoid s
 
 ## Known Limitations
 
-- The MVP uses an in-memory store. PostgreSQL migrations and durable transaction tests are the next production-hardening step.
+- The development HTTP server still uses the in-memory store by default; production deployments should wire the PostgreSQL adapter or another durable store explicitly.
 - The API is v0.1 and may change before a tagged stable release.
-- The package currently avoids external runtime dependencies to keep local verification deterministic.
+- The development bearer-token adapter is intentionally minimal and must be replaced before internet exposure.
 
 ## License
 

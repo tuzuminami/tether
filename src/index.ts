@@ -3,6 +3,7 @@ export { TetherError } from "./errors.js";
 export { createDefaultApiRuntime, createTetherHttpServer, handleTetherHttpRequest } from "./http-api.js";
 export { InMemoryRelationshipStore, RelationshipService, createDevelopmentContext } from "./relationship-engine.js";
 export { parseRelationshipModel } from "./relationship-model.js";
+export { PostgresRelationshipStore, TETHER_POSTGRES_MIGRATIONS } from "./postgres-store.js";
 export type {
   ApplyEventResult,
   AuditEvent,
@@ -24,3 +25,4 @@ export type {
   TetherScope,
   TransitionRule
 } from "./types.js";
+export type { PoolLike, PostgresEventApplication } from "./postgres-store.js";
