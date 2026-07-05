@@ -1,11 +1,12 @@
 import { TetherError } from "./errors.js";
+import type { BoundaryRule, DecayRule, RelationshipAxis, RelationshipModel, TransitionRule } from "./types.js";
 
-export function parseRelationshipModel(input) {
+export function parseRelationshipModel(input: unknown): RelationshipModel {
   if (!isRecord(input)) {
     throw validation(["model must be an object"]);
   }
 
-  const details = [];
+  const details: string[] = [];
   const id = readString(input, "id", details);
   const version = readString(input, "version", details);
   const axes = readAxes(input.axes, details);
@@ -15,9 +16,7 @@ export function parseRelationshipModel(input) {
   const decayRules = input.decayRules === undefined ? [] : readDecayRules(input.decayRules, axes, details);
 
   const blockedPositive = new Set(
-    boundaryRules
-      .filter((rule) => rule.blocksPositiveDelta)
-      .map((rule) => `${rule.eventType}:${rule.axis}`)
+    boundaryRules.filter((rule) => rule.blocksPositiveDelta).map((rule) => `${rule.eventType}:${rule.axis}`)
   );
   for (const rule of transitionRules) {
     if (rule.delta > 0 && blockedPositive.has(`${rule.eventType}:${rule.axis}`)) {
@@ -29,10 +28,18 @@ export function parseRelationshipModel(input) {
     throw validation(details);
   }
 
-  return { id, version, axes, events: [...eventTypes].map((type) => ({ type })), transitionRules, boundaryRules, decayRules };
+  return {
+    id,
+    version,
+    axes,
+    events: [...eventTypes].map((type) => ({ type })),
+    transitionRules,
+    boundaryRules,
+    decayRules
+  };
 }
 
-function readAxes(value, details) {
+function readAxes(value: unknown, details: string[]): RelationshipAxis[] {
   if (!Array.isArray(value) || value.length === 0) {
     details.push("axes must contain at least one axis");
     return [];
@@ -60,12 +67,12 @@ function readAxes(value, details) {
   return axes;
 }
 
-function readEventTypes(value, details) {
+function readEventTypes(value: unknown, details: string[]): Set<string> {
   if (!Array.isArray(value) || value.length === 0) {
     details.push("events must contain at least one event");
     return new Set();
   }
-  const eventTypes = new Set();
+  const eventTypes = new Set<string>();
   for (const [index, event] of value.entries()) {
     if (!isRecord(event)) {
       details.push(`events[${index}] must be an object`);
@@ -76,7 +83,12 @@ function readEventTypes(value, details) {
   return eventTypes;
 }
 
-function readTransitionRules(value, axes, eventTypes, details) {
+function readTransitionRules(
+  value: unknown,
+  axes: RelationshipAxis[],
+  eventTypes: Set<string>,
+  details: string[]
+): TransitionRule[] {
   if (!Array.isArray(value) || value.length === 0) {
     details.push("transitionRules must contain at least one rule");
     return [];
@@ -106,7 +118,12 @@ function readTransitionRules(value, axes, eventTypes, details) {
   return rules;
 }
 
-function readBoundaryRules(value, axes, eventTypes, details) {
+function readBoundaryRules(
+  value: unknown,
+  axes: RelationshipAxis[],
+  eventTypes: Set<string>,
+  details: string[]
+): BoundaryRule[] {
   if (!Array.isArray(value)) {
     details.push("boundaryRules must be an array");
     return [];
@@ -132,7 +149,7 @@ function readBoundaryRules(value, axes, eventTypes, details) {
   });
 }
 
-function readDecayRules(value, axes, details) {
+function readDecayRules(value: unknown, axes: RelationshipAxis[], details: string[]): DecayRule[] {
   if (!Array.isArray(value)) {
     details.push("decayRules must be an array");
     return [];
@@ -155,7 +172,7 @@ function readDecayRules(value, axes, details) {
   });
 }
 
-function readString(record, key, details, path = key) {
+function readString(record: Record<string, unknown>, key: string, details: string[], path = key): string {
   const value = record[key];
   if (typeof value !== "string" || value.trim().length === 0) {
     details.push(`${path} must be a non-empty string`);
@@ -164,7 +181,7 @@ function readString(record, key, details, path = key) {
   return value;
 }
 
-function readNumber(record, key, details, path = key) {
+function readNumber(record: Record<string, unknown>, key: string, details: string[], path = key): number {
   const value = record[key];
   if (typeof value !== "number" || !Number.isFinite(value)) {
     details.push(`${path} must be a finite number`);
@@ -173,10 +190,10 @@ function readNumber(record, key, details, path = key) {
   return value;
 }
 
-function isRecord(value) {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function validation(details) {
+function validation(details: string[]): TetherError {
   return new TetherError("VALIDATION_FAILED", "Relationship model validation failed.", details);
 }

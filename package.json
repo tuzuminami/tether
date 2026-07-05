@@ -5,6 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "files": [
     "dist",
     "apps/api",
@@ -15,13 +16,21 @@
     "SECURITY.md"
   ],
   "scripts": {
-    "build": "node scripts/build.mjs",
+    "build": "tsc -p tsconfig.json",
     "check:private-boundary": "node scripts/check-private-boundary.mjs",
     "start": "node apps/api/server.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
-    "verify": "npm run check:private-boundary && npm run build && npm test"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "verify": "npm run check:private-boundary && npm run typecheck && npm test"
   },
   "engines": {
     "node": ">=22.6"
+  },
+  "dependencies": {
+    "pg": "8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.0",
+    "typescript": "6.0.3"
   }
 }

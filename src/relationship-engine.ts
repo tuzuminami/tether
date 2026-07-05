@@ -1,33 +1,55 @@
+import { randomUUID } from "node:crypto";
 import { canonicalJson, sha256Hex } from "./canonical-json.js";
 import { TetherError } from "./errors.js";
 import { parseRelationshipModel } from "./relationship-model.js";
+import type {
+  ApplyEventResult,
+  AuditEvent,
+  DecayPreview,
+  IdempotencyEntry,
+  OutboxEvent,
+  RelationshipEventInput,
+  RelationshipExplanation,
+  RelationshipExplanationWarning,
+  RelationshipRecord,
+  RequestContext,
+  StoredRelationshipModel,
+  TetherScope
+} from "./types.js";
+
+export interface RelationshipServiceOptions {
+  now?: () => string;
+  idGenerator?: () => string;
+}
 
 export class InMemoryRelationshipStore {
-  constructor() {
-    this.models = new Map();
-    this.relationships = new Map();
-    this.idempotency = new Map();
-    this.auditEvents = [];
-    this.outboxEvents = [];
-  }
+  readonly models = new Map<string, StoredRelationshipModel>();
+  readonly relationships = new Map<string, RelationshipRecord>();
+  readonly idempotency = new Map<string, IdempotencyEntry<ApplyEventResult>>();
+  readonly auditEvents: AuditEvent[] = [];
+  readonly outboxEvents: OutboxEvent[] = [];
 
-  modelKey(tenantId, modelId, modelVersion) {
+  modelKey(tenantId: string, modelId: string, modelVersion: string): string {
     return `${tenantId}:${modelId}:${modelVersion}`;
   }
 
-  relationshipKey(tenantId, relationshipId) {
+  relationshipKey(tenantId: string, relationshipId: string): string {
     return `${tenantId}:${relationshipId}`;
   }
 }
 
 export class RelationshipService {
-  constructor(store, options = {}) {
+  private readonly store: InMemoryRelationshipStore;
+  private readonly now: () => string;
+  private readonly idGenerator: () => string;
+
+  constructor(store: InMemoryRelationshipStore, options: RelationshipServiceOptions = {}) {
     this.store = store;
     this.now = options.now ?? (() => new Date().toISOString());
-    this.idGenerator = options.idGenerator ?? (() => crypto.randomUUID());
+    this.idGenerator = options.idGenerator ?? (() => randomUUID());
   }
 
-  createModel(context, input) {
+  createModel(context: RequestContext, input: unknown): StoredRelationshipModel {
     requireScope(context, "model:write");
     const model = parseRelationshipModel(input);
     const now = this.now();
@@ -37,7 +59,7 @@ export class RelationshipService {
         "published model versions are immutable"
       ]);
     }
-    const record = {
+    const record: StoredRelationshipModel = {
       ...model,
       tenantId: context.tenantId,
       createdAt: now,
@@ -49,7 +71,7 @@ export class RelationshipService {
     return record;
   }
 
-  createRelationship(context, input) {
+  createRelationship(context: RequestContext, input: unknown): RelationshipRecord {
     requireScope(context, "relationship:write");
     const modelId = readRequiredInputString(input, "modelId");
     const modelVersion = readRequiredInputString(input, "modelVersion");
@@ -64,7 +86,7 @@ export class RelationshipService {
         "relationship ids are immutable within a tenant"
       ]);
     }
-    const relationship = {
+    const relationship: RelationshipRecord = {
       id: relationshipId,
       tenantId: context.tenantId,
       subjectRef,
@@ -88,7 +110,12 @@ export class RelationshipService {
     return relationship;
   }
 
-  applyEvent(context, relationshipId, event, idempotencyKey) {
+  applyEvent(
+    context: RequestContext,
+    relationshipId: string,
+    event: RelationshipEventInput,
+    idempotencyKey: string | undefined
+  ): ApplyEventResult {
     requireScope(context, "relationship:write");
     if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
       throw new TetherError("VALIDATION_FAILED", "Idempotency key is required.", ["idempotencyKey must be non-empty"]);
@@ -107,16 +134,16 @@ export class RelationshipService {
     const model = this.getModel(context, relationship.modelId, relationship.modelVersion);
     const eventType = readInputString(event, "type");
     const eventId = readInputString(event, "id") ?? this.idGenerator();
-    if (!model.events.some((declaredEvent) => declaredEvent.type === eventType)) {
+    if (eventType === undefined || !model.events.some((declaredEvent) => declaredEvent.type === eventType)) {
       throw new TetherError("VALIDATION_FAILED", "Relationship event validation failed.", [
-        `event type ${eventType} is not declared by the model`
+        `event type ${eventType ?? "<missing>"} is not declared by the model`
       ]);
     }
 
     const before = { ...relationship.snapshot.values };
     const matchingRules = model.transitionRules.filter((rule) => rule.eventType === eventType);
-    const appliedRules = [];
-    const warnings = [];
+    const appliedRules: string[] = [];
+    const warnings: RelationshipExplanationWarning[] = [];
     const after = { ...before };
 
     for (const rule of matchingRules) {
@@ -135,7 +162,8 @@ export class RelationshipService {
       appliedRules.push(rule.id);
     }
 
-    const explanation = {
+    const createdAt = this.now();
+    const explanation: RelationshipExplanation = {
       id: this.idGenerator(),
       relationshipId,
       snapshotVersion: relationship.snapshot.version + 1,
@@ -147,7 +175,7 @@ export class RelationshipService {
       after,
       warnings,
       reasonCode: appliedRules.length > 0 ? "TRANSITION_APPLIED" : "NO_TRANSITION_APPLIED",
-      createdAt: this.now()
+      createdAt
     };
 
     relationship.snapshot = {
@@ -155,9 +183,9 @@ export class RelationshipService {
       values: after,
       modelId: model.id,
       modelVersion: model.version,
-      updatedAt: explanation.createdAt
+      updatedAt: createdAt
     };
-    relationship.updatedAt = explanation.createdAt;
+    relationship.updatedAt = createdAt;
     relationship.explanations = [...relationship.explanations, explanation];
 
     this.appendAudit(context, "relationship.event_applied", relationshipId, {
@@ -175,13 +203,13 @@ export class RelationshipService {
     return result;
   }
 
-  getExplanation(context, relationshipId) {
+  getExplanation(context: RequestContext, relationshipId: string): RelationshipExplanation | null {
     requireScope(context, "relationship:read");
     const relationship = this.getRelationship(context, relationshipId);
     return relationship.explanations.at(-1) ?? null;
   }
 
-  previewDecay(context, relationshipId, baselineAt) {
+  previewDecay(context: RequestContext, relationshipId: string, baselineAt: string): DecayPreview {
     requireScope(context, "relationship:read");
     const relationship = this.getRelationship(context, relationshipId);
     const model = this.getModel(context, relationship.modelId, relationship.modelVersion);
@@ -209,7 +237,7 @@ export class RelationshipService {
     };
   }
 
-  getModel(context, modelId, modelVersion) {
+  getModel(context: RequestContext, modelId: string, modelVersion: string): StoredRelationshipModel {
     const model = this.store.models.get(this.store.modelKey(context.tenantId, modelId, modelVersion));
     if (model === undefined) {
       throw new TetherError("RESOURCE_NOT_FOUND", "Resource was not found.", []);
@@ -217,7 +245,7 @@ export class RelationshipService {
     return model;
   }
 
-  getRelationship(context, relationshipId) {
+  getRelationship(context: RequestContext, relationshipId: string): RelationshipRecord {
     const relationship = this.store.relationships.get(this.store.relationshipKey(context.tenantId, relationshipId));
     if (relationship === undefined) {
       throw new TetherError("RESOURCE_NOT_FOUND", "Resource was not found.", []);
@@ -225,7 +253,7 @@ export class RelationshipService {
     return relationship;
   }
 
-  appendAudit(context, action, resourceId, metadata) {
+  private appendAudit(context: RequestContext, action: string, resourceId: string, metadata: Record<string, unknown>): void {
     this.store.auditEvents.push({
       id: this.idGenerator(),
       tenantId: context.tenantId,
@@ -238,7 +266,7 @@ export class RelationshipService {
     });
   }
 
-  appendOutbox(context, eventType, resourceId, payload) {
+  private appendOutbox(context: RequestContext, eventType: string, resourceId: string, payload: Record<string, unknown>): void {
     this.store.outboxEvents.push({
       id: this.idGenerator(),
       tenantId: context.tenantId,
@@ -251,7 +279,7 @@ export class RelationshipService {
   }
 }
 
-export function createDevelopmentContext(overrides = {}) {
+export function createDevelopmentContext(overrides: Partial<RequestContext> = {}): RequestContext {
   return {
     tenantId: "tenant_demo",
     actorId: "actor_demo",
@@ -261,7 +289,7 @@ export function createDevelopmentContext(overrides = {}) {
   };
 }
 
-function requireScope(context, scope) {
+function requireScope(context: RequestContext | undefined, scope: TetherScope): void {
   if (context === undefined || typeof context.tenantId !== "string" || typeof context.actorId !== "string") {
     throw new TetherError("AUTHENTICATION_REQUIRED", "Authentication is required.", []);
   }
@@ -270,8 +298,11 @@ function requireScope(context, scope) {
   }
 }
 
-function readInputString(input, key) {
-  const value = input?.[key];
+function readInputString(input: unknown, key: string): string | undefined {
+  if (!isRecord(input)) {
+    throw new TetherError("VALIDATION_FAILED", `${key} must be a non-empty string.`, []);
+  }
+  const value = input[key];
   if (value === undefined) {
     return undefined;
   }
@@ -281,7 +312,7 @@ function readInputString(input, key) {
   return value;
 }
 
-function readRequiredInputString(input, key) {
+function readRequiredInputString(input: unknown, key: string): string {
   const value = readInputString(input, key);
   if (value === undefined) {
     throw new TetherError("VALIDATION_FAILED", `${key} is required.`, [`${key} must be a non-empty string`]);
@@ -289,6 +320,10 @@ function readRequiredInputString(input, key) {
   return value;
 }
 
-function clamp(value, min, max) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
