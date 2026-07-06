@@ -16,6 +16,7 @@ It models relationship state as explicit versioned data: axes, bounded values, d
 - Public boundary guard to prevent private operator material from being committed.
 - Strict TypeScript source, declaration output, and typecheck gate.
 - PostgreSQL persistence adapter with migrations and transaction-backed idempotency, audit, and outbox writes.
+- Explicit HTTP runtime store configuration that fails closed if unsupported durable runtime storage is requested.
 - JSON Schema contract artifacts with fail-closed HTTP request validation.
 - Non-mutating relationship event simulation API.
 - Docker Compose development stack and E2E smoke script.
@@ -32,7 +33,7 @@ It models relationship state as explicit versioned data: axes, bounded values, d
 ```bash
 npm run verify
 npm run build
-PORT=3000 node apps/api/server.mjs
+TETHER_RUNTIME_STORE=memory PORT=3000 node apps/api/server.mjs
 ```
 
 Create a model:
@@ -104,7 +105,7 @@ service.createModel(context, {
 
 ## PostgreSQL Persistence
 
-The default development runtime uses `InMemoryRelationshipStore` so local tests stay deterministic. Production services can use the PostgreSQL adapter for durable persistence and transactional side effects:
+The default development runtime uses `InMemoryRelationshipStore` so local tests stay deterministic. Production services can use the PostgreSQL adapter API for durable persistence and transactional side effects:
 
 ```js
 import { PostgresRelationshipStore } from "@tuzuminami/tether";
@@ -115,6 +116,16 @@ await store.migrate();
 
 `PostgresRelationshipStore` uses the same checked-out PostgreSQL client for each `BEGIN` / `COMMIT` / `ROLLBACK` block, and stores relationship updates, idempotency records, audit events, and outbox events in one transaction. Call `await store.close()` during shutdown.
 
+The packaged HTTP server does not silently pretend to be durable. `TETHER_RUNTIME_STORE=memory` is the supported server runtime for v0.2. `TETHER_RUNTIME_STORE=postgres` intentionally aborts startup until the HTTP `RelationshipService` is wired to a durable store. `TETHER_MIGRATE_POSTGRES=1` may be used to apply PostgreSQL migrations before starting the memory runtime in disposable development stacks:
+
+```bash
+TETHER_RUNTIME_STORE=memory \
+TETHER_MIGRATE_POSTGRES=1 \
+DATABASE_URL=postgres://tether:tether_dev_password@127.0.0.1:5432/tether \
+PORT=3000 \
+node apps/api/server.mjs
+```
+
 `rollbackForDevelopment()` is provided for disposable local environments and tests. Production rollback should follow an expand/deploy/backfill/contract plan and restore from backups where destructive rollback would lose data.
 
 ## Docker Compose
@@ -124,7 +135,7 @@ docker compose up --build
 TETHER_BASE_URL=http://127.0.0.1:3000 npm run e2e:smoke
 ```
 
-The compose stack starts PostgreSQL and the API. The API applies PostgreSQL migrations when `TETHER_MIGRATE_POSTGRES=1`; the default HTTP runtime remains in-memory for deterministic local development.
+The compose stack starts PostgreSQL and the API with `TETHER_RUNTIME_STORE=memory`. The API applies PostgreSQL migrations when `TETHER_MIGRATE_POSTGRES=1`; the HTTP runtime remains in-memory for deterministic local development. Bare packaged server startup fails closed until `TETHER_RUNTIME_STORE` is set explicitly.
 
 ## API Contract
 
@@ -132,7 +143,7 @@ See [openapi/openapi.yaml](openapi/openapi.yaml).
 
 Protected endpoints require:
 
-- `Authorization: Bearer dev-token` for the development adapter.
+- `Authorization: Bearer dev-token` for the development adapter only.
 - `X-Tenant-Id`.
 - `X-Correlation-Id` where available.
 - `Idempotency-Key` for event application.
@@ -153,13 +164,13 @@ npm run release:check
 
 ## Security Model
 
-The current development adapter is intentionally narrow and rejects missing or invalid bearer credentials. Production deployments should replace it with a real auth adapter before exposing the API.
+The current development adapter is intentionally narrow and rejects missing or invalid bearer credentials. Production auth is not implemented in v0.2. Production deployments must replace the development bearer-token adapter before exposing the API.
 
 TETHER stores hashes and identifiers for event evidence in explanations; avoid sending raw conversation content as event payload. Use stable references or hashes from the caller system.
 
 ## Known Limitations
 
-- The development HTTP server still uses the in-memory store by default; production deployments should wire the PostgreSQL adapter or another durable store explicitly.
+- The packaged HTTP server uses the in-memory store in v0.2. Selecting `TETHER_RUNTIME_STORE=postgres` fails closed until a durable HTTP store is implemented.
 - The API is v0.2 and may change before a tagged stable release.
 - The development bearer-token adapter is intentionally minimal and must be replaced before internet exposure.
 

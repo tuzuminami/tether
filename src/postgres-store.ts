@@ -116,15 +116,19 @@ export class PostgresRelationshipStore {
   }
 
   async migrate(): Promise<void> {
-    for (const statement of TETHER_POSTGRES_MIGRATIONS) {
-      await this.pool.query(statement);
-    }
+    await this.withTransaction(async (client) => {
+      for (const statement of TETHER_POSTGRES_MIGRATIONS) {
+        await client.query(statement);
+      }
+    });
   }
 
   async rollbackForDevelopment(): Promise<void> {
-    for (const statement of TETHER_POSTGRES_ROLLBACK_MIGRATIONS) {
-      await this.pool.query(statement);
-    }
+    await this.withTransaction(async (client) => {
+      for (const statement of TETHER_POSTGRES_ROLLBACK_MIGRATIONS) {
+        await client.query(statement);
+      }
+    });
   }
 
   async close(): Promise<void> {

@@ -3,6 +3,10 @@ info:
   title: TETHER API
   version: 0.2.0
   summary: Explainable relationship state engine API.
+  description: >
+    TETHER exposes explicit, bounded relationship state transitions. The v0.2
+    packaged HTTP server uses a development bearer adapter and fails closed
+    for unsupported production runtime storage.
 servers:
   - url: http://localhost:3000
 paths:
@@ -192,6 +196,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
+      description: Development bearer adapter only. Production authentication is not implemented in v0.2 and must be supplied before exposure.
   parameters:
     TenantId:
       name: X-Tenant-Id

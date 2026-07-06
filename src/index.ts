@@ -1,6 +1,7 @@
 export { canonicalJson, sha256Hex } from "./canonical-json.js";
 export { TetherError } from "./errors.js";
 export { createDefaultApiRuntime, createTetherHttpServer, handleTetherHttpRequest } from "./http-api.js";
+export { createConfiguredApiRuntime, resolveTetherApiRuntimeConfig } from "./runtime-config.js";
 export { InMemoryRelationshipStore, RelationshipService, createDevelopmentContext } from "./relationship-engine.js";
 export { parseRelationshipModel } from "./relationship-model.js";
 export {
@@ -41,3 +42,10 @@ export type {
   TransitionRule
 } from "./types.js";
 export type { PoolLike, PostgresEventApplication } from "./postgres-store.js";
+export type {
+  CreateConfiguredApiRuntimeOptions,
+  TetherApiRuntimeConfig,
+  TetherApiRuntimeEnvironment,
+  TetherConfiguredApiRuntime,
+  TetherRuntimeStore
+} from "./runtime-config.js";

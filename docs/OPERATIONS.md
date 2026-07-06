@@ -2,15 +2,22 @@
 
 ## Runtime Modes
 
-- Development API: `npm run build && npm start`
+- Development API: `npm run build && TETHER_RUNTIME_STORE=memory npm start`
 - Local smoke: `npm run verify`
 - Docker stack: `docker compose up --build`
 
-The default HTTP API runtime uses in-memory state for deterministic development. Production deployments should wire a durable store explicitly and replace the development bearer-token adapter.
+The packaged HTTP API runtime uses in-memory state for deterministic development. Runtime storage is explicit:
+
+- `TETHER_RUNTIME_STORE=memory`: supported v0.2 HTTP runtime.
+- `TETHER_RUNTIME_STORE=postgres`: intentionally fails closed until the HTTP `RelationshipService` is wired to a durable store.
+
+Server startup fails closed when `TETHER_RUNTIME_STORE` is missing. Do not treat successful PostgreSQL migration as proof that the HTTP runtime is durable. Production deployments should wire a durable store explicitly and replace the development bearer-token adapter.
 
 ## PostgreSQL Migrations
 
-`PostgresRelationshipStore.migrate()` applies the v0.2 schema idempotently. `rollbackForDevelopment()` drops TETHER tables and indexes for disposable local environments only.
+`PostgresRelationshipStore.migrate()` applies the v0.2 schema idempotently inside one transaction. `rollbackForDevelopment()` drops TETHER tables and indexes inside one transaction for disposable local environments only.
+
+Set `TETHER_MIGRATE_POSTGRES=1` with `DATABASE_URL` to run migrations during packaged server startup. This does not change the HTTP runtime store; set `TETHER_RUNTIME_STORE=memory` explicitly until durable HTTP storage is implemented.
 
 Production rollback guidance:
 

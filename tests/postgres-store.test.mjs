@@ -156,20 +156,55 @@ test("TEST-PG-003 rolls back and maps unique violations to immutable resource er
   assert.equal(client.released, true);
 });
 
-test("TEST-PG-004 exposes upgrade and rollback migration statements", async () => {
+test("TEST-PG-004 runs upgrade and rollback migration statements inside transactions", async () => {
   assert.equal(TETHER_POSTGRES_MIGRATIONS.length >= 5, true);
   assert.equal(TETHER_POSTGRES_ROLLBACK_MIGRATIONS.length >= 5, true);
   assert.equal(TETHER_POSTGRES_ROLLBACK_MIGRATIONS[0].startsWith("DROP INDEX"), true);
   assert.equal(TETHER_POSTGRES_ROLLBACK_MIGRATIONS.at(-1), "DROP TABLE IF EXISTS tether_relationship_models");
 
-  const pool = new FakePool(new FakeClient());
+  const client = new FakeClient();
+  const pool = new FakePool(client);
   const store = new PostgresRelationshipStore(pool);
   await store.migrate();
   await store.rollbackForDevelopment();
 
-  assert.equal(pool.queries.length, TETHER_POSTGRES_MIGRATIONS.length + TETHER_POSTGRES_ROLLBACK_MIGRATIONS.length);
-  assert.equal(pool.queries[0].text.startsWith("CREATE TABLE IF NOT EXISTS tether_relationship_models"), true);
-  assert.equal(pool.queries.at(-1).text, "DROP TABLE IF EXISTS tether_relationship_models");
+  assert.equal(pool.queries.length, 0);
+  assert.equal(client.queries[0].text, "BEGIN");
+  assert.equal(client.queries[TETHER_POSTGRES_MIGRATIONS.length + 1].text, "COMMIT");
+  assert.equal(client.queries[TETHER_POSTGRES_MIGRATIONS.length + 2].text, "BEGIN");
+  assert.equal(client.queries.at(-1).text, "COMMIT");
+  assert.equal(
+    client.queries.some((query) => query.text.startsWith("CREATE TABLE IF NOT EXISTS tether_relationship_models")),
+    true
+  );
+  assert.equal(client.queries.some((query) => query.text === "DROP TABLE IF EXISTS tether_relationship_models"), true);
+});
+
+test("TEST-PG-005 rolls back relationship, audit, and outbox writes as one transaction", async () => {
+  const client = new FakeClient([], { failOn: "INSERT INTO tether_outbox_events" });
+  const store = new PostgresRelationshipStore(new FakePool(client));
+
+  await assert.rejects(() => store.createRelationship(relationship, auditEvent, outboxEvent), /query failed/);
+  assert.equal(client.queries[0].text, "BEGIN");
+  assert.equal(client.queries.some((query) => query.text.includes("INSERT INTO tether_relationships")), true);
+  assert.equal(client.queries.some((query) => query.text.includes("INSERT INTO tether_audit_events")), true);
+  assert.equal(client.queries.some((query) => query.text.includes("INSERT INTO tether_outbox_events")), true);
+  assert.equal(client.queries.some((query) => query.text === "COMMIT"), false);
+  assert.equal(client.queries.at(-1).text, "ROLLBACK");
+  assert.equal(client.released, true);
+});
+
+test("TEST-PG-006 reads models and relationships through tenant-scoped SQL only", async () => {
+  const pool = new FakePool(new FakeClient());
+  const store = new PostgresRelationshipStore(pool);
+
+  await store.getModel("tenant_pg", "model_pg", "1.0.0");
+  await store.getRelationship("tenant_pg", "rel_pg");
+
+  assert.equal(pool.queries[0].text.includes("WHERE tenant_id = $1 AND model_id = $2 AND model_version = $3"), true);
+  assert.deepEqual(pool.queries[0].values, ["tenant_pg", "model_pg", "1.0.0"]);
+  assert.equal(pool.queries[1].text.includes("WHERE tenant_id = $1 AND relationship_id = $2"), true);
+  assert.deepEqual(pool.queries[1].values, ["tenant_pg", "rel_pg"]);
 });
 
 class FakePool {

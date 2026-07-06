@@ -17,6 +17,7 @@ services:
     environment:
       PORT: "3000"
       DATABASE_URL: postgres://tether:tether_dev_password@postgres:5432/tether
+      TETHER_RUNTIME_STORE: "memory"
       TETHER_MIGRATE_POSTGRES: "1"
     ports:
       - "3000:3000"
