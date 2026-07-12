@@ -1,6 +1,6 @@
 {
   "name": "@tuzuminami/tether",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "Explainable relationship state engine for AI products and interactive systems.",
   "license": "Apache-2.0",
   "type": "module",

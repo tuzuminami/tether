@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.0 - 2026-07-13
+
+- Finalized TETHER as the explainable relationship-state support module.
+- Added fail-closed HTTP/runtime configuration, schema contracts, PostgreSQL
+  transactional storage, migration rollback, and release/package governance.
+
 ## 0.2.0 - 2026-07-05
 
 - Replaced the root license text with canonical Apache License 2.0 text for GitHub license detection.
