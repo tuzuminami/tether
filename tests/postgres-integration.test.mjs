@@ -70,8 +70,9 @@ integration("TEST-PG-INT-001 proves PostgreSQL 16 migration, retry, concurrent r
     ]);
     assert.equal(firstApply.relationship.snapshot.version, 2);
     assert.deepEqual(concurrentReplay, firstApply);
+    assert.equal(await secondService.getExplanation(tenantB, relationship.id), null);
     await assert.rejects(
-      () => secondService.getExplanation(tenantB, relationship.id),
+      () => secondService.getExplanation(tenantB, "relationship-postgres-unknown"),
       (error) => error instanceof TetherError && error.code === "RESOURCE_NOT_FOUND"
     );
 
