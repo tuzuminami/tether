@@ -250,6 +250,31 @@ test("TEST-PG-008 upgrades legacy text collations and delimiter idempotency scop
   await assert.rejects(() => new PostgresRelationshipStore(new FakePool(missingIndex)).migrate(), /required index .* missing or incompatible/);
 });
 
+test("TEST-PG-014 accepts PostgreSQL name[] constraint catalog results while preserving exact key validation", async () => {
+  const client = new FakeClient([], {
+    respond: legacyMigrationResponses({
+      tables: Object.keys(legacyColumns()),
+      columns: legacyColumns(),
+      constraintColumns: "postgres-name-array"
+    })
+  });
+
+  await new PostgresRelationshipStore(new FakePool(client)).migrate();
+  assert.equal(client.queries.some((query) => query.text.startsWith("INSERT INTO tether_schema_migrations")), true);
+
+  const malformed = new FakeClient([], {
+    respond: legacyMigrationResponses({
+      tables: Object.keys(legacyColumns()),
+      columns: legacyColumns(),
+      constraintColumns: "malformed"
+    })
+  });
+  await assert.rejects(
+    () => new PostgresRelationshipStore(new FakePool(malformed)).migrate(),
+    /tether_relationship_models is missing its required primary key/
+  );
+});
+
 test("TEST-PG-012 locks every baseline table in fixed DDL order before scope conversion", async () => {
   const legacy = new FakeClient([], {
     respond: legacyMigrationResponses({
@@ -476,14 +501,14 @@ class FakeClient {
   }
 }
 
-function legacyMigrationResponses({ tables, columns, columnOverride, indexes = legacyIndexes(), legacyScopes = [], mismatch = [] }) {
+function legacyMigrationResponses({ tables, columns, columnOverride, indexes = legacyIndexes(), legacyScopes = [], mismatch = [], constraintColumns = "array" }) {
   return (text) => {
     if (text.includes("tether baseline scope revalidation")) return { rows: [] };
     if (text.includes("FROM information_schema.tables")) return { rows: tables.map((table_name) => ({ table_name })) };
     if (text.startsWith("SELECT scope, tenant_id,")) return { rows: legacyScopes };
     if (text.startsWith("ALTER TABLE") || text.startsWith("UPDATE tether_idempotency_keys") || text.startsWith("CREATE TABLE IF NOT EXISTS tether_schema_migrations") || text.startsWith("INSERT INTO tether_schema_migrations")) return { rows: [] };
     if (text.includes("FROM pg_attribute")) return { rows: legacyColumnRows(columns, columnOverride) };
-    if (text.includes("FROM pg_constraint")) return { rows: legacyPrimaryKeys() };
+    if (text.includes("FROM pg_constraint")) return { rows: legacyPrimaryKeys(constraintColumns) };
     if (text.includes("FROM pg_index")) return { rows: indexes };
     if (text.includes("WITH mismatches")) return { rows: mismatch };
     if (text.includes("SELECT version, checksum FROM tether_schema_migrations")) return { rows: [] };
@@ -515,13 +540,18 @@ function legacyColumnRows(columns, override) {
   }));
 }
 
-function legacyPrimaryKeys() {
+function legacyPrimaryKeys(columns = "array") {
+  const catalogColumns = (names) => {
+    if (columns === "postgres-name-array") return `{${names.join(",")}}`;
+    if (columns === "malformed") return "not-a-postgres-array";
+    return names;
+  };
   return [
-    { table_name: "tether_relationship_models", constraint_type: "p", columns: ["tenant_id", "model_id", "model_version"] },
-    { table_name: "tether_relationships", constraint_type: "p", columns: ["tenant_id", "relationship_id"] },
-    { table_name: "tether_idempotency_keys", constraint_type: "p", columns: ["scope"] },
-    { table_name: "tether_audit_events", constraint_type: "p", columns: ["id"] },
-    { table_name: "tether_outbox_events", constraint_type: "p", columns: ["id"] }
+    { table_name: "tether_relationship_models", constraint_type: "p", columns: catalogColumns(["tenant_id", "model_id", "model_version"]) },
+    { table_name: "tether_relationships", constraint_type: "p", columns: catalogColumns(["tenant_id", "relationship_id"]) },
+    { table_name: "tether_idempotency_keys", constraint_type: "p", columns: catalogColumns(["scope"]) },
+    { table_name: "tether_audit_events", constraint_type: "p", columns: catalogColumns(["id"]) },
+    { table_name: "tether_outbox_events", constraint_type: "p", columns: catalogColumns(["id"]) }
   ];
 }
 

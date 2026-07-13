@@ -165,7 +165,7 @@ interface LegacyColumnRow extends QueryResultRow {
 interface LegacyConstraintRow extends QueryResultRow {
   table_name: string;
   constraint_type: "p" | "u";
-  columns: string[];
+  columns: string[] | string;
 }
 
 interface LegacyIndexRow extends QueryResultRow {
@@ -690,8 +690,15 @@ function legacyIndexExpectations(): readonly { table: string; name: string; matc
   ];
 }
 
-function sameColumns(actual: readonly string[], expected: readonly string[]): boolean {
-  return actual.length === expected.length && actual.every((column, index) => column === expected[index]);
+function sameColumns(actual: readonly string[] | string, expected: readonly string[]): boolean {
+  const columns = normalizeLegacyConstraintColumns(actual);
+  return columns !== undefined && columns.length === expected.length && columns.every((column, index) => column === expected[index]);
+}
+
+function normalizeLegacyConstraintColumns(columns: readonly string[] | string): readonly string[] | undefined {
+  if (typeof columns !== "string") return columns;
+  if (!/^\{[a-z_]+(?:,[a-z_]+)*\}$/.test(columns)) return undefined;
+  return columns.slice(1, -1).split(",");
 }
 
 function isNowDefault(value: string | null): boolean {
