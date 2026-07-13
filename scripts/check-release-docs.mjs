@@ -54,10 +54,11 @@ function gitIgnores(path) {
 function presentsUnreleasedSourceAsPublished(markdown, version) {
   const content = markdown.replace(/\s+/g, " ");
   const escapedVersion = version.replaceAll(".", "\\.");
+  const sourceVersion = `v?${escapedVersion}`;
   return [
-    new RegExp(`v${escapedVersion}[^.]{0,120}\\b(?:is|was|has been)\\b[^.]{0,80}\\b(?:released|published|available)\\b`, "i"),
-    new RegExp(`v${escapedVersion}[^.]{0,80}\\b(?:GitHub|npm)\\s+(?:release|package)[^.]{0,80}\\b(?:is|was|has been)\\b[^.]{0,80}\\b(?:released|published|available)\\b`, "i"),
-    new RegExp(`v${escapedVersion}\\s+is\\s+the\\s+supported\\s+public\\s+(?:release|runtime)`, "i")
+    new RegExp(`\\b${sourceVersion}\\b[^.]{0,120}\\b(?:is|was|has been)\\b[^.]{0,80}\\b(?:released|published|available|current|latest|stable|supported)\\b`, "i"),
+    new RegExp(`\\b${sourceVersion}\\b[^.]{0,80}\\b(?:GitHub|npm)\\s+(?:release|package)[^.]{0,80}\\b(?:is|was|has been)\\b[^.]{0,80}\\b(?:released|published|available|current|latest|stable|supported)\\b`, "i"),
+    new RegExp(`\\b(?:current|latest|supported|stable)(?:\\s+\\w+){0,4}\\s*:\\s*(?:TETHER\\s+)?${sourceVersion}\\b`, "i")
   ].some((pattern) => pattern.test(content));
 }
 

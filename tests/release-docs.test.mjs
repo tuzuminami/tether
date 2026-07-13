@@ -31,9 +31,14 @@ test("release documentation rejects an unreleased source contract presented as p
   );
 });
 
-test("release documentation rejects an unreleased source contract presented as available", () => {
-  const available = docs("The latest published GitHub release is v1.0.0. v2.0.0 GitHub release is now available.");
-  assert.throws(() => validateReleaseDocs(base({ docs: available })), /must not present an unreleased source contract/);
+test("release documentation rejects alternate unreleased source publication claims", () => {
+  for (const claim of [
+    "The latest published GitHub release is v1.0.0. v2.0.0 GitHub release is now available.",
+    "The latest published GitHub release is v1.0.0. TETHER v2.0.0 is the current stable release.",
+    "The latest published GitHub release is v1.0.0. TETHER 2.0.0 has been published to npm."
+  ]) {
+    assert.throws(() => validateReleaseDocs(base({ docs: docs(claim) })), /must not present an unreleased source contract/);
+  }
 });
 
 test("release documentation rejects a site workspace that is not actively ignored or excluded from a pack", () => {
