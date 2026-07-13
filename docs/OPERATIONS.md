@@ -1,8 +1,11 @@
 # TETHER Operations
 
-TETHER v2.0.0 is the supported public runtime. This document describes the v2
-deployment contract; retain the migration guidance in the README and release
-checklist when upgrading from v1.
+<!-- tether-release-status: source=v2.0.0; github=v1.0.0; npm=unpublished; v2=unreleased -->
+
+This document describes the unreleased v2.0.0 source deployment contract. The latest
+published GitHub release is v1.0.0, so do not present these settings as a published v2
+runtime until the v2 tag and release exist. Retain the migration guidance in the README
+and release checklist when upgrading from v1.
 
 ## Runtime Modes
 

@@ -54,11 +54,17 @@ TETHER is an explainable relationship state engine for AI products, games, educa
 
 It models relationship state as explicit versioned data: axes, bounded values, declared events, transition rules, boundary rules, deterministic decay, snapshots, and explanations. It does not infer real human emotions, diagnose users, optimize dependency, or mutate state from opaque model output.
 
-## Current Capabilities
+## Release Status
 
-TETHER v2.0.0 is the supported public release. The package and HTTP contracts
-follow semantic versioning; incompatible runtime or API changes require a new
-major release and a documented migration path.
+<!-- tether-release-status: source=v2.0.0; github=v1.0.0; npm=unpublished; v2=unreleased -->
+
+The source contract in this branch is v2.0.0. The latest published GitHub release is
+v1.0.0; v2.0.0 has not been released on GitHub or published to npm yet. Treat the v2
+documentation as a source and release-candidate contract until its tag and release are
+published. The package and HTTP contracts follow semantic versioning; incompatible runtime
+or API changes require a new major release and a documented migration path.
+
+## Current Capabilities
 
 - Relationship model validation with axes, events, transition rules, boundary rules, and decay rules.
 - Fail-closed rejection for undefined events, out-of-range declarations, and positive state progression from boundary-blocked events.
