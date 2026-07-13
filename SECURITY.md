@@ -2,7 +2,8 @@
 
 ## Supported Versions
 
-The project is pre-1.0. Security fixes target the latest `main` branch until versioned releases begin.
+Security fixes target the latest 2.x release and the `main` branch. Version
+1.x is no longer supported; upgrade to 2.x before requesting a security fix.
 
 ## Reporting a Vulnerability
 

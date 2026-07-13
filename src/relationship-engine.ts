@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { canonicalJson, sha256Hex } from "./canonical-json.js";
 import { TetherError } from "./errors.js";
 import { parseRelationshipModel } from "./relationship-model.js";
+import { encodeStorageKey } from "./storage-key.js";
 import type {
   ApplyEventResult,
   AuditEvent,
@@ -31,11 +32,15 @@ export class InMemoryRelationshipStore {
   readonly outboxEvents: OutboxEvent[] = [];
 
   modelKey(tenantId: string, modelId: string, modelVersion: string): string {
-    return `${tenantId}:${modelId}:${modelVersion}`;
+    return encodeStorageKey("model", tenantId, modelId, modelVersion);
   }
 
   relationshipKey(tenantId: string, relationshipId: string): string {
-    return `${tenantId}:${relationshipId}`;
+    return encodeStorageKey("relationship", tenantId, relationshipId);
+  }
+
+  idempotencyKey(tenantId: string, relationshipId: string, idempotencyKey: string): string {
+    return encodeStorageKey("idempotency", tenantId, relationshipId, idempotencyKey);
   }
 }
 
@@ -121,7 +126,7 @@ export class RelationshipService {
     if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
       throw new TetherError("VALIDATION_FAILED", "Idempotency key is required.", ["idempotencyKey must be non-empty"]);
     }
-    const idempotencyScope = `${context.tenantId}:${relationshipId}:${idempotencyKey}`;
+    const idempotencyScope = this.store.idempotencyKey(context.tenantId, relationshipId, idempotencyKey);
     const requestHash = sha256Hex(canonicalJson({ relationshipId, event }));
     const existing = this.store.idempotency.get(idempotencyScope);
     if (existing !== undefined) {
@@ -310,16 +315,6 @@ export class RelationshipService {
       }
     };
   }
-}
-
-export function createDevelopmentContext(overrides: Partial<RequestContext> = {}): RequestContext {
-  return {
-    tenantId: "tenant_demo",
-    actorId: "actor_demo",
-    scopes: ["model:write", "relationship:write", "relationship:read"],
-    correlationId: "corr_demo",
-    ...overrides
-  };
 }
 
 function requireScope(context: RequestContext | undefined, scope: TetherScope): void {

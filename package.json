@@ -1,11 +1,17 @@
 {
   "name": "@tuzuminami/tether",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Explainable relationship state engine for AI products and interactive systems.",
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "files": [
     "dist",
     "apps/api",
@@ -22,11 +28,13 @@
     "check:licenses": "node scripts/check-licenses.mjs",
     "check:private-boundary": "node scripts/check-private-boundary.mjs",
     "e2e:smoke": "node scripts/e2e-smoke.mjs",
+    "test:postgres-integration": "npm run build && node --test tests/postgres-integration.test.mjs",
+    "check:package-boundary": "node scripts/check-package-boundary.mjs",
     "release:check": "npm run verify && npm run check:licenses && npm audit --audit-level=high && npm_config_cache=/tmp/tether-npm-cache npm pack --dry-run",
     "start": "node apps/api/server.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "verify": "npm run check:private-boundary && npm run typecheck && npm test && npm run e2e:smoke"
+    "verify": "npm run check:private-boundary && npm run typecheck && npm test && npm run e2e:smoke && npm run check:package-boundary"
   },
   "engines": {
     "node": ">=22.6"

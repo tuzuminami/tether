@@ -7,6 +7,7 @@ export type TetherErrorCode =
   | "RESOURCE_IMMUTABLE"
   | "IDEMPOTENCY_CONFLICT"
   | "PLUGIN_INCOMPATIBLE"
+  | "REQUEST_BODY_TOO_LARGE"
   | "DEPENDENCY_UNAVAILABLE";
 
 export type TetherScope = "model:write" | "relationship:write" | "relationship:read";

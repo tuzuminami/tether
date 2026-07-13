@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.0 - 2026-07-13
+
+- Wired the PostgreSQL store into the HTTP runtime with verified authentication
+  adapter loading, checksummed migration ledger validation, and advisory-lock
+  coordination for concurrent startup.
+- Removed insecure implicit HTTP defaults: runtime storage, bind host, and a
+  verified tenant-matching auth adapter are now required. Compose demo auth is
+  tenant-fixed, `/health` is liveness-only, and `/ready` verifies durable
+  runtime readiness.
+
 ## 1.0.0 - 2026-07-13
 
 - Finalized TETHER as the explainable relationship-state support module.
