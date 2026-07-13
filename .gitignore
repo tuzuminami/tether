@@ -4,6 +4,7 @@ build/
 coverage/
 .turbo/
 .next/
+/site/
 
 .env
 .env.*

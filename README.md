@@ -56,6 +56,10 @@ It models relationship state as explicit versioned data: axes, bounded values, d
 
 ## Current Capabilities
 
+TETHER v2.0.0 is the supported public release. The package and HTTP contracts
+follow semantic versioning; incompatible runtime or API changes require a new
+major release and a documented migration path.
+
 - Relationship model validation with axes, events, transition rules, boundary rules, and decay rules.
 - Fail-closed rejection for undefined events, out-of-range declarations, and positive state progression from boundary-blocked events.
 - Relationship creation pinned to a model version.

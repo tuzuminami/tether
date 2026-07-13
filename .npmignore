@@ -2,6 +2,7 @@ src
 tests
 scripts
 .github
+site
 tsconfig.json
 
 .private

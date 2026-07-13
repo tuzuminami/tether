@@ -8,6 +8,7 @@ const prohibitedPathPatterns = [
   /(^|\/)\.serena(\/|$)/,
   /^docs\/(00_GLOSSARY|01_BMA|02_StRS|03_SyRS|04_AD|05_DD|06_API_CONTRACT|07_VV_PLAN|08_TRACEABILITY|09_MVP_BACKLOG|10_RELEASE_CRITERIA)\.md$/,
   /(^|\/)(private-ai-control-plane|\.private|\.codex-private|evidence-private|private-fixtures)(\/|$)/,
+  /(^|\/)site(\/|$)/,
   /^docs\/(ai|private)(\/|$)/,
   /(^|\/)\.env(\.|$)/,
   /\.(sqlite|sqlite3|dump|jsonl)$/i,

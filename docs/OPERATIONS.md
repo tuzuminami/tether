@@ -1,5 +1,9 @@
 # TETHER Operations
 
+TETHER v2.0.0 is the supported public runtime. This document describes the v2
+deployment contract; retain the migration guidance in the README and release
+checklist when upgrading from v1.
+
 ## Runtime Modes
 
 - Development API: `npm run build && TETHER_RUNTIME_STORE=memory TETHER_BIND_HOST=127.0.0.1 TETHER_AUTH_ADAPTER=./your-verified-auth-adapter.mjs npm start`
