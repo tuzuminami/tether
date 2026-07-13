@@ -1,14 +1,21 @@
 export { canonicalJson, sha256Hex } from "./canonical-json.js";
+export { encodeStorageKey } from "./storage-key.js";
 export { TetherError } from "./errors.js";
-export { createDefaultApiRuntime, createTetherHttpServer, handleTetherHttpRequest } from "./http-api.js";
+export {
+  createTetherHttpServer,
+  handleTetherHttpRequest,
+  TetherAuthenticationError
+} from "./http-api.js";
 export { createConfiguredApiRuntime, resolveTetherApiRuntimeConfig } from "./runtime-config.js";
-export { InMemoryRelationshipStore, RelationshipService, createDevelopmentContext } from "./relationship-engine.js";
+export { InMemoryRelationshipStore, RelationshipService } from "./relationship-engine.js";
 export { parseRelationshipModel } from "./relationship-model.js";
 export {
   PostgresRelationshipStore,
   TETHER_POSTGRES_MIGRATIONS,
+  TETHER_POSTGRES_MIGRATION_METADATA,
   TETHER_POSTGRES_ROLLBACK_MIGRATIONS
 } from "./postgres-store.js";
+export { PostgresRelationshipService } from "./postgres-relationship-service.js";
 export {
   createRelationshipSchema,
   decayPreviewSchema,
@@ -42,6 +49,9 @@ export type {
   TransitionRule
 } from "./types.js";
 export type { PoolLike, PostgresEventApplication } from "./postgres-store.js";
+export type { TetherPostgresMigration } from "./postgres-store.js";
+export type { PostgresRelationshipServiceOptions } from "./postgres-relationship-service.js";
+export type { TetherAuthenticationFailure, TetherAuthenticationRequest, TetherAuthenticator, TetherHttpService, TetherReadinessProbe } from "./http-api.js";
 export type {
   CreateConfiguredApiRuntimeOptions,
   TetherApiRuntimeConfig,

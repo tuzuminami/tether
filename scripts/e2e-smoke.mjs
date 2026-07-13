@@ -1,12 +1,20 @@
 #!/usr/bin/env node
 import { Readable } from "node:stream";
-import { createDefaultApiRuntime, handleTetherHttpRequest } from "../dist/index.js";
+import { InMemoryRelationshipStore, RelationshipService, handleTetherHttpRequest } from "../dist/index.js";
 
 const externalBaseUrl = process.env.TETHER_BASE_URL;
-const runtime = externalBaseUrl === undefined ? createDefaultApiRuntime() : undefined;
+const runtime = externalBaseUrl === undefined ? { service: new RelationshipService(new InMemoryRelationshipStore()) } : undefined;
+const authorization = externalBaseUrl === undefined ? "Bearer test-token" : process.env.TETHER_SMOKE_AUTHORIZATION;
+if (authorization === undefined) throw new Error("TETHER_SMOKE_AUTHORIZATION is required when TETHER_BASE_URL is set.");
+const testAuthenticator = {
+  authenticate({ authorization: requestAuthorization, tenantId, correlationId }) {
+    if (requestAuthorization !== "Bearer test-token" || tenantId === undefined) throw new Error("test authentication failed");
+    return { tenantId, actorId: "test-actor", scopes: ["model:write", "relationship:write", "relationship:read"], correlationId };
+  }
+};
 
 const headers = {
-  authorization: "Bearer dev-token",
+  authorization,
   "x-tenant-id": "tenant_smoke",
   "x-correlation-id": "corr_smoke",
   "content-type": "application/json"
@@ -85,7 +93,7 @@ async function directRequest(method, url, headers, body) {
       }
     }
   };
-  await handleTetherHttpRequest(runtime.service, requestStream, response);
+  await handleTetherHttpRequest(runtime.service, requestStream, response, testAuthenticator);
   const json = JSON.parse(Buffer.concat(response.chunks).toString("utf8"));
   if (response.status < 200 || response.status >= 300) {
     throw new Error(`${method} ${url} failed: ${response.status} ${JSON.stringify(json)}`);

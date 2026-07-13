@@ -2,22 +2,26 @@
 
 ## Runtime Modes
 
-- Development API: `npm run build && TETHER_RUNTIME_STORE=memory npm start`
+- Development API: `npm run build && TETHER_RUNTIME_STORE=memory TETHER_BIND_HOST=127.0.0.1 TETHER_AUTH_ADAPTER=./your-verified-auth-adapter.mjs npm start`
 - Local smoke: `npm run verify`
-- Docker stack: `docker compose up --build`
+- Docker smoke: `docker compose up --build --wait && curl -fsS http://127.0.0.1:3000/ready && TETHER_BASE_URL=http://127.0.0.1:3000 TETHER_SMOKE_AUTHORIZATION='Bearer tether-compose-demo' npm run e2e:smoke && docker compose down`
 
-The packaged HTTP API runtime uses in-memory state for deterministic development. Runtime storage is explicit:
+The packaged HTTP API runtime uses in-memory state for deterministic development and PostgreSQL for durable deployments. Runtime storage is explicit:
 
-- `TETHER_RUNTIME_STORE=memory`: supported v0.2 HTTP runtime.
-- `TETHER_RUNTIME_STORE=postgres`: intentionally fails closed until the HTTP `RelationshipService` is wired to a durable store.
+- `TETHER_RUNTIME_STORE=memory`: deterministic development runtime.
+- `TETHER_RUNTIME_STORE=postgres`: durable runtime; requires `DATABASE_URL`, `TETHER_MIGRATE_POSTGRES=1`, and `TETHER_AUTH_ADAPTER`.
 
-Server startup fails closed when `TETHER_RUNTIME_STORE` is missing. Do not treat successful PostgreSQL migration as proof that the HTTP runtime is durable. Production deployments should wire a durable store explicitly and replace the development bearer-token adapter.
+Server startup fails closed when `TETHER_RUNTIME_STORE`, `TETHER_BIND_HOST`, or `TETHER_AUTH_ADAPTER` is missing. In `NODE_ENV=production`, memory runtime, skipped migration readiness, and a missing auth adapter are rejected. The auth adapter is an ES module exporting `authenticateTetherRequest({ authorization, tenantId, correlationId })`; it must return a verified tenant-scoped request context.
+
+The Compose demo adapter is local/CI-only and tenant-fixed to `tenant_smoke`: `Bearer tether-compose-demo` with any other `X-Tenant-Id` fails authentication. `docker compose up --wait` waits for both the PostgreSQL and API healthchecks; the API healthcheck uses `GET /ready`.
+
+`GET /health` is a public liveness probe and never contacts PostgreSQL. `GET /ready` is a public readiness probe: the PostgreSQL runtime performs a safe `SELECT 1`, and returns `503 DEPENDENCY_UNAVAILABLE` if its durable dependency cannot serve requests. Use `/ready` for traffic admission and rollout gates.
 
 ## PostgreSQL Migrations
 
-`PostgresRelationshipStore.migrate()` applies the v0.2 schema idempotently inside one transaction. `rollbackForDevelopment()` drops TETHER tables and indexes inside one transaction for disposable local environments only.
+`PostgresRelationshipStore.migrate()` obtains a transaction-scoped PostgreSQL advisory lock, validates the `tether_schema_migrations` version/checksum ledger, then applies only missing migrations and records their checksums in the same transaction. `TETHER_POSTGRES_MIGRATIONS` remains the public DDL `string[]`; `TETHER_POSTGRES_MIGRATION_METADATA` exposes version/checksum metadata for callers that need it. A legacy schema is baselined only after its table/column types, nullability, deterministic `C` collation for tenant and identity text, primary keys, required indexes, and defaults match the initial migration. Unknown or checksum-changed applied migrations fail closed. `rollbackForDevelopment()` drops TETHER tables and indexes inside one transaction for disposable local environments only.
 
-Set `TETHER_MIGRATE_POSTGRES=1` with `DATABASE_URL` to run migrations during packaged server startup. This does not change the HTTP runtime store; set `TETHER_RUNTIME_STORE=memory` explicitly until durable HTTP storage is implemented.
+Set `TETHER_MIGRATE_POSTGRES=1` with `DATABASE_URL` to run migration readiness checks during packaged server startup. PostgreSQL HTTP runtime retains its pool for the process lifetime; close it during graceful shutdown.
 
 Production rollback guidance:
 

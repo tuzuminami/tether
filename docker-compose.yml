@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: tether
       POSTGRES_PASSWORD: tether_dev_password
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tether -d tether"]
       interval: 5s
@@ -16,11 +16,22 @@ services:
     build: .
     environment:
       PORT: "3000"
+      TETHER_BIND_HOST: "0.0.0.0"
+      NODE_ENV: development
       DATABASE_URL: postgres://tether:tether_dev_password@postgres:5432/tether
-      TETHER_RUNTIME_STORE: "memory"
+      TETHER_RUNTIME_STORE: "postgres"
       TETHER_MIGRATE_POSTGRES: "1"
+      TETHER_AUTH_ADAPTER: /app/compose-auth-adapter.mjs
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./examples/compose-auth-adapter.mjs:/app/compose-auth-adapter.mjs:ro
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/ready').then((response) => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))\""]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s

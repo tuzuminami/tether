@@ -3,9 +3,12 @@ import test from "node:test";
 import {
   InMemoryRelationshipStore,
   RelationshipService,
-  TetherError,
-  createDevelopmentContext
+  TetherError
 } from "../dist/index.js";
+
+function createTestContext(overrides = {}) {
+  return { tenantId: "tenant_test", actorId: "actor_test", scopes: ["model:write", "relationship:write", "relationship:read"], correlationId: "corr_test", ...overrides };
+}
 
 const model = {
   id: "starter-model",
@@ -40,7 +43,7 @@ function createService() {
 
 test("TEST-TETHER-001 applies an event once and records explanation, audit, and outbox", () => {
   const { store, service } = createService();
-  const context = createDevelopmentContext();
+  const context = createTestContext();
   service.createModel(context, model);
   service.createRelationship(context, {
     id: "rel_1",
@@ -74,7 +77,7 @@ test("TEST-TETHER-001 applies an event once and records explanation, audit, and 
 
 test("TEST-TETHER-002 rejects undefined events and reused idempotency keys with different payloads", () => {
   const { service } = createService();
-  const context = createDevelopmentContext();
+  const context = createTestContext();
   service.createModel(context, model);
   service.createRelationship(context, {
     id: "rel_1",
@@ -97,7 +100,7 @@ test("TEST-TETHER-002 rejects undefined events and reused idempotency keys with 
 
 test("TEST-TETHER-003 validates boundary rules fail closed", () => {
   const { service } = createService();
-  const context = createDevelopmentContext();
+  const context = createTestContext();
   assert.throws(
     () =>
       service.createModel(context, {
@@ -119,7 +122,7 @@ test("TEST-TETHER-003 validates boundary rules fail closed", () => {
 
 test("TEST-TETHER-004 enforces tenant scope and deterministic decay preview", () => {
   const { service } = createService();
-  const context = createDevelopmentContext();
+  const context = createTestContext();
   service.createModel(context, model);
   service.createRelationship(context, {
     id: "rel_1",
@@ -132,18 +135,18 @@ test("TEST-TETHER-004 enforces tenant scope and deterministic decay preview", ()
   const preview = service.previewDecay(context, "rel_1", "2026-07-07T00:00:00.000Z");
   assert.equal(preview.values.trust, 54);
   assert.throws(
-    () => service.getExplanation(createDevelopmentContext({ tenantId: "other_tenant" }), "rel_1"),
+    () => service.getExplanation(createTestContext({ tenantId: "other_tenant" }), "rel_1"),
     (error) => error instanceof TetherError && error.code === "RESOURCE_NOT_FOUND"
   );
   assert.throws(
-    () => service.createRelationship(createDevelopmentContext({ scopes: ["relationship:read"] }), {}),
+    () => service.createRelationship(createTestContext({ scopes: ["relationship:read"] }), {}),
     (error) => error instanceof TetherError && error.code === "TENANT_SCOPE_DENIED"
   );
 });
 
 test("TEST-TETHER-005 rejects missing relationship fields and duplicate resources", () => {
   const { service } = createService();
-  const context = createDevelopmentContext();
+  const context = createTestContext();
   service.createModel(context, model);
 
   assert.throws(
@@ -175,7 +178,7 @@ test("TEST-TETHER-005 rejects missing relationship fields and duplicate resource
 
 test("TEST-TETHER-006 rejects out-of-range models and clamps event transitions", () => {
   const { service } = createService();
-  const context = createDevelopmentContext();
+  const context = createTestContext();
 
   assert.throws(
     () =>
@@ -203,4 +206,28 @@ test("TEST-TETHER-006 rejects out-of-range models and clamps event transitions",
   const result = service.applyEvent(context, "rel_clamp", { id: "evt_clamp", type: "helpful_interaction" }, "idem_clamp");
   assert.equal(result.relationship.snapshot.values.trust, 100);
   assert.equal(result.explanation.after.trust, 100);
+});
+
+test("TEST-TETHER-007 keeps delimiter-bearing tenant, resource, and idempotency keys isolated", () => {
+  const { store, service } = createService();
+  const left = createTestContext({ tenantId: "tenant:one" });
+  const right = createTestContext({ tenantId: "tenant" });
+  const leftModel = { ...model, id: "model", version: "v1" };
+  const rightModel = { ...model, id: "one:model", version: "v1" };
+
+  service.createModel(left, leftModel);
+  service.createModel(right, rightModel);
+  service.createRelationship(left, { id: "rel", modelId: leftModel.id, modelVersion: leftModel.version, subjectRef: "left" });
+  service.createRelationship(right, { id: "one:rel", modelId: rightModel.id, modelVersion: rightModel.version, subjectRef: "right" });
+
+  const leftResult = service.applyEvent(left, "rel", { id: "event-left", type: "helpful_interaction" }, "event:idem");
+  const rightResult = service.applyEvent(right, "one:rel", { id: "event-right", type: "helpful_interaction" }, "idem");
+
+  assert.equal(store.models.size, 2);
+  assert.equal(store.relationships.size, 2);
+  assert.equal(store.idempotency.size, 2);
+  assert.equal(service.getRelationship(left, "rel").subjectRef, "left");
+  assert.equal(service.getRelationship(right, "one:rel").subjectRef, "right");
+  assert.equal(service.applyEvent(left, "rel", { id: "event-left", type: "helpful_interaction" }, "event:idem"), leftResult);
+  assert.equal(service.applyEvent(right, "one:rel", { id: "event-right", type: "helpful_interaction" }, "idem"), rightResult);
 });

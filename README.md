@@ -65,8 +65,9 @@ It models relationship state as explicit versioned data: axes, bounded values, d
 - Minimal HTTP API with request/response envelopes.
 - Public boundary guard to prevent private operator material from being committed.
 - Strict TypeScript source, declaration output, and typecheck gate.
-- PostgreSQL persistence adapter with migrations and transaction-backed idempotency, audit, and outbox writes.
-- Explicit HTTP runtime store configuration that fails closed if unsupported durable runtime storage is requested.
+- PostgreSQL-backed HTTP runtime with transaction-backed idempotency, audit, and outbox writes.
+- Checksummed PostgreSQL migration ledger protected by a transaction-scoped advisory lock.
+- Explicit verified authentication adapter boundary; production startup fails closed without one.
 - JSON Schema contract artifacts with fail-closed HTTP request validation.
 - Non-mutating relationship event simulation API.
 - Docker Compose development stack and E2E smoke script.
@@ -83,14 +84,18 @@ It models relationship state as explicit versioned data: axes, bounded values, d
 ```bash
 npm run verify
 npm run build
-TETHER_RUNTIME_STORE=memory PORT=3000 node apps/api/server.mjs
+TETHER_RUNTIME_STORE=memory \
+TETHER_BIND_HOST=127.0.0.1 \
+TETHER_AUTH_ADAPTER=./your-verified-auth-adapter.mjs \
+PORT=3000 \
+node apps/api/server.mjs
 ```
 
 Create a model:
 
 ```bash
 curl -sS http://localhost:3000/v1/models \
-  -H 'Authorization: Bearer dev-token' \
+  -H 'Authorization: Bearer <verified-credential>' \
   -H 'X-Tenant-Id: tenant_demo' \
   -H 'Content-Type: application/json' \
   --data @examples/relationship-model.json
@@ -100,7 +105,7 @@ Create a relationship:
 
 ```bash
 curl -sS http://localhost:3000/v1/relationships \
-  -H 'Authorization: Bearer dev-token' \
+  -H 'Authorization: Bearer <verified-credential>' \
   -H 'X-Tenant-Id: tenant_demo' \
   -H 'Content-Type: application/json' \
   --data '{"id":"rel_demo","modelId":"starter-model","modelVersion":"1.0.0","subjectRef":"subject_hash_demo"}'
@@ -110,7 +115,7 @@ Apply an event idempotently:
 
 ```bash
 curl -sS http://localhost:3000/v1/relationships/rel_demo/events \
-  -H 'Authorization: Bearer dev-token' \
+  -H 'Authorization: Bearer <verified-credential>' \
   -H 'X-Tenant-Id: tenant_demo' \
   -H 'Idempotency-Key: idem_demo_1' \
   -H 'Content-Type: application/json' \
@@ -121,7 +126,7 @@ Simulate an event without mutating state:
 
 ```bash
 curl -sS http://localhost:3000/v1/relationships/rel_demo/simulate \
-  -H 'Authorization: Bearer dev-token' \
+  -H 'Authorization: Bearer <verified-credential>' \
   -H 'X-Tenant-Id: tenant_demo' \
   -H 'Content-Type: application/json' \
   --data '{"event":{"id":"evt_sim_1","type":"helpful_interaction"}}'
@@ -132,13 +137,17 @@ curl -sS http://localhost:3000/v1/relationships/rel_demo/simulate \
 ```js
 import {
   InMemoryRelationshipStore,
-  RelationshipService,
-  createDevelopmentContext
+  RelationshipService
 } from "@tuzuminami/tether";
 
 const store = new InMemoryRelationshipStore();
 const service = new RelationshipService(store);
-const context = createDevelopmentContext({ tenantId: "tenant_demo" });
+const context = {
+  tenantId: "tenant_demo",
+  actorId: "actor_demo",
+  scopes: ["model:write", "relationship:write", "relationship:read"],
+  correlationId: "corr_demo"
+};
 
 service.createModel(context, {
   id: "starter-model",
@@ -155,7 +164,7 @@ service.createModel(context, {
 
 ## PostgreSQL Persistence
 
-The default development runtime uses `InMemoryRelationshipStore` so local tests stay deterministic. Production services can use the PostgreSQL adapter API for durable persistence and transactional side effects:
+Public `createTetherHttpServer()` and `handleTetherHttpRequest()` require an explicit authenticator. Tests inject an in-process authenticator; package consumers must configure a verified auth adapter. The packaged PostgreSQL runtime uses durable storage and transactional side effects:
 
 ```js
 import { PostgresRelationshipStore } from "@tuzuminami/tether";
@@ -164,14 +173,16 @@ const store = PostgresRelationshipStore.fromConnectionString(process.env.DATABAS
 await store.migrate();
 ```
 
-`PostgresRelationshipStore` uses the same checked-out PostgreSQL client for each `BEGIN` / `COMMIT` / `ROLLBACK` block, and stores relationship updates, idempotency records, audit events, and outbox events in one transaction. Call `await store.close()` during shutdown.
+`PostgresRelationshipStore` uses the same checked-out PostgreSQL client for each `BEGIN` / `COMMIT` / `ROLLBACK` block, and stores relationship updates, idempotency records, audit events, and outbox events in one transaction. Migrations take a transaction-scoped advisory lock and record an immutable version/checksum ledger; an unknown or changed applied migration stops startup. Call `await store.close()` during shutdown.
 
-The packaged HTTP server does not silently pretend to be durable. `TETHER_RUNTIME_STORE=memory` is the supported server runtime for v0.2. `TETHER_RUNTIME_STORE=postgres` intentionally aborts startup until the HTTP `RelationshipService` is wired to a durable store. `TETHER_MIGRATE_POSTGRES=1` may be used to apply PostgreSQL migrations before starting the memory runtime in disposable development stacks:
+For a durable runtime, `TETHER_RUNTIME_STORE=postgres` requires `TETHER_MIGRATE_POSTGRES=1`, `DATABASE_URL`, and `TETHER_AUTH_ADAPTER`. The auth adapter is an ES module exporting `authenticateTetherRequest({ authorization, tenantId, correlationId })`, which must return a verified `{ tenantId, actorId, scopes, correlationId }` context. Adapters must throw `TetherAuthenticationError("invalid_credentials", ...)` for missing or invalid credentials (HTTP 401), and `TetherAuthenticationError("tenant_context_denied", ...)` for an authenticated identity that cannot use the requested tenant (HTTP 403). Any other adapter failure is an HTTP 503 dependency failure.
 
 ```bash
-TETHER_RUNTIME_STORE=memory \
+TETHER_RUNTIME_STORE=postgres \
 TETHER_MIGRATE_POSTGRES=1 \
 DATABASE_URL=postgres://tether:tether_dev_password@127.0.0.1:5432/tether \
+TETHER_AUTH_ADAPTER=./dist/your-verified-auth-adapter.js \
+TETHER_BIND_HOST=0.0.0.0 \
 PORT=3000 \
 node apps/api/server.mjs
 ```
@@ -181,11 +192,87 @@ node apps/api/server.mjs
 ## Docker Compose
 
 ```bash
-docker compose up --build
-TETHER_BASE_URL=http://127.0.0.1:3000 npm run e2e:smoke
+docker compose up --build --wait
+curl -fsS http://127.0.0.1:3000/ready
+TETHER_BASE_URL=http://127.0.0.1:3000 \
+TETHER_SMOKE_AUTHORIZATION='Bearer tether-compose-demo' \
+npm run e2e:smoke
+docker compose down
 ```
 
-The compose stack starts PostgreSQL and the API with `TETHER_RUNTIME_STORE=memory`. The API applies PostgreSQL migrations when `TETHER_MIGRATE_POSTGRES=1`; the HTTP runtime remains in-memory for deterministic local development. Bare packaged server startup fails closed until `TETHER_RUNTIME_STORE` is set explicitly.
+The Compose API and PostgreSQL ports bind only to loopback. It runs the durable PostgreSQL runtime and mounts a read-only demo auth adapter at startup; that adapter accepts only the documented smoke bearer token and is for local/CI smoke use, never production. Bare packaged server startup still fails closed until runtime storage, bind host, and a verified authentication adapter are configured explicitly.
+
+The demo credential is tenant-fixed: it only accepts `X-Tenant-Id: tenant_smoke`. Any other tenant header is rejected, including with the otherwise valid demo bearer token.
+
+## v1 to v2 migration
+
+2.0.0 removes insecure HTTP runtime defaults. The `/v1` routes and JSON request
+schemas remain stable, but startup and authentication must be made explicit.
+
+### Removed APIs and configuration
+
+- `createDefaultApiRuntime()` is no longer exported. Create a configured
+  runtime with `createConfiguredApiRuntime()` instead.
+- `createTetherHttpServer()` without an `authenticator` now throws.
+- The built-in `Bearer dev-token` path and `TETHER_DEVELOPMENT_AUTH` are
+  removed; `TETHER_DEVELOPMENT_AUTH` is rejected at startup.
+- Implicit runtime store and bind-host defaults are removed. Set
+  `TETHER_RUNTIME_STORE` and `TETHER_BIND_HOST` explicitly.
+
+Replace a v1-style startup that relied on defaults:
+
+```js
+// v1: removed defaults and development token
+createDefaultApiRuntime().server.listen(3000);
+```
+
+with an explicit v2 runtime:
+
+```js
+import { createConfiguredApiRuntime } from "@tuzuminami/tether";
+
+const { config, server } = await createConfiguredApiRuntime();
+server.listen(config.port, config.bindHost);
+```
+
+For PostgreSQL, set `TETHER_RUNTIME_STORE=postgres`, `DATABASE_URL`,
+`TETHER_MIGRATE_POSTGRES=1`, `TETHER_BIND_HOST`, and `TETHER_AUTH_ADAPTER`.
+Memory remains available only for deterministic development and test use.
+
+### Auth adapter replacement
+
+`TETHER_AUTH_ADAPTER` points to an ES module that exports
+`authenticateTetherRequest`. Verify the credential in the adapter, then return
+the exact tenant requested by `X-Tenant-Id`; do not trust a tenant supplied by
+an unverified client claim. Import and throw `TetherAuthenticationError` for
+expected denials; do not use an untyped `Error` for credential or tenant
+decisions.
+
+```js
+// verified-auth-adapter.mjs
+import { TetherAuthenticationError } from "@tuzuminami/tether";
+
+export async function authenticateTetherRequest({ authorization, tenantId, correlationId }) {
+  const identity = await verifyCredential(authorization); // application-owned verification
+  if (identity === undefined) throw new TetherAuthenticationError("invalid_credentials", "Credential is invalid.");
+  if (identity.tenantId !== tenantId) throw new TetherAuthenticationError("tenant_context_denied", "Tenant access is denied.");
+  return { tenantId, actorId: identity.actorId, scopes: identity.scopes, correlationId };
+}
+```
+
+### Rollback
+
+Keep the v1 deployment artifact and a tested PostgreSQL backup until the v2
+cutover is accepted. For production, prefer a forward fix or restore from the
+backup rather than destructive schema rollback. `rollbackForDevelopment()` is
+only for disposable local databases; it drops TETHER tables and must never be
+used as a production rollback procedure.
+
+### Probes
+
+`GET /health` is liveness-only and does not contact PostgreSQL. `GET /ready`
+performs a safe, read-only runtime readiness check; use it for load balancers,
+Compose, and rollout gates that must confirm durable database availability.
 
 ## API Contract
 
@@ -193,7 +280,7 @@ See [openapi/openapi.yaml](openapi/openapi.yaml).
 
 Protected endpoints require:
 
-- `Authorization: Bearer dev-token` for the development adapter only.
+- A verified `Authorization` credential accepted by the configured auth adapter.
 - `X-Tenant-Id`.
 - `X-Correlation-Id` where available.
 - `Idempotency-Key` for event application.
@@ -214,15 +301,14 @@ npm run release:check
 
 ## Security Model
 
-The current development adapter is intentionally narrow and rejects missing or invalid bearer credentials. Production auth is not implemented in v0.2. Production deployments must replace the development bearer-token adapter before exposing the API.
+Every HTTP runtime requires a separately supplied verified auth adapter, which returns the tenant-scoped actor and scopes used for authorization. Production mode also rejects memory runtime, skipped migration readiness checks, and missing adapters.
 
 TETHER stores hashes and identifiers for event evidence in explanations; avoid sending raw conversation content as event payload. Use stable references or hashes from the caller system.
 
 ## Known Limitations
 
-- The packaged HTTP server uses the in-memory store in v0.2. Selecting `TETHER_RUNTIME_STORE=postgres` fails closed until a durable HTTP store is implemented.
-- The API is v0.2 and may change before a tagged stable release.
-- The development bearer-token adapter is intentionally minimal and must be replaced before internet exposure.
+- `TETHER_RUNTIME_STORE=memory` remains a development/test runtime and is rejected in `NODE_ENV=production`.
+- PostgreSQL migrations are forward-only in production; `rollbackForDevelopment()` is for disposable environments only.
 
 ## Operations
 
