@@ -9,6 +9,7 @@ npm run release:check
 The release gate runs:
 
 - private-boundary scan
+- release documentation status and active local-site workspace boundary check
 - strict TypeScript typecheck
 - unit, API, contract, storage, PostgreSQL HTTP runtime E2E, and E2E smoke tests
 - dependency license audit
@@ -23,5 +24,7 @@ Manual checks:
 - Confirm `npm pack --dry-run` contains no private harness, private docs, secrets, or local state.
 
 ## TETHER v2.0.0 Compatibility
+
+<!-- tether-release-status: source=v2.0.0; github=v1.0.0; npm=unpublished; v2=unreleased -->
 
 2.0.0 removes `createDefaultApiRuntime()`, implicit HTTP runtime defaults, and the development bearer-token path. Consumers must configure `TETHER_RUNTIME_STORE`, `TETHER_BIND_HOST`, and `TETHER_AUTH_ADAPTER`; PostgreSQL deployments must also set `DATABASE_URL` and `TETHER_MIGRATE_POSTGRES=1`. Auth adapters must return a tenant matching `X-Tenant-Id`. The `/v1` HTTP routes and JSON Schema validation behavior remain compatible. Confirm production traffic gates use `/ready`; `/health` is liveness-only.
