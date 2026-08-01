@@ -12,6 +12,7 @@ export function authenticateTetherRequest({ authorization, tenantId, correlation
     tenantId: "tenant_smoke",
     actorId: "compose-smoke-actor",
     scopes: ["model:write", "relationship:write", "relationship:read"],
+    subjectRefs: ["subject_hash_smoke"],
     correlationId
   };
 }

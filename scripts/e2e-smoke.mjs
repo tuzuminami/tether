@@ -9,7 +9,7 @@ if (authorization === undefined) throw new Error("TETHER_SMOKE_AUTHORIZATION is 
 const testAuthenticator = {
   authenticate({ authorization: requestAuthorization, tenantId, correlationId }) {
     if (requestAuthorization !== "Bearer test-token" || tenantId === undefined) throw new Error("test authentication failed");
-    return { tenantId, actorId: "test-actor", scopes: ["model:write", "relationship:write", "relationship:read"], correlationId };
+    return { tenantId, actorId: "test-actor", scopes: ["model:write", "relationship:write", "relationship:read"], subjectRefs: ["subject_hash_smoke"], correlationId };
   }
 };
 

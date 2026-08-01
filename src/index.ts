@@ -36,6 +36,7 @@ export type {
   RelationshipAxis,
   RelationshipEventDeclaration,
   RelationshipEventInput,
+  RelationshipDelegation,
   RelationshipExplanation,
   RelationshipExplanationWarning,
   RelationshipModel,

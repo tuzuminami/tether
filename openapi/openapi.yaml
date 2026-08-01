@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: TETHER API
-  version: 2.0.0
+  version: 2.0.1
   summary: Explainable relationship state engine API.
   description: >
     TETHER exposes explicit, bounded relationship state transitions. The packaged

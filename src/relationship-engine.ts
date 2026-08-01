@@ -82,6 +82,7 @@ export class RelationshipService {
     const modelId = readRequiredInputString(input, "modelId");
     const modelVersion = readRequiredInputString(input, "modelVersion");
     const subjectRef = readRequiredInputString(input, "subjectRef");
+    requireSubjectAccess(context, subjectRef, "relationship:write");
     const model = this.getModel(context, modelId, modelVersion);
     const now = this.now();
     const values = Object.fromEntries(model.axes.map((axis) => [axis.id, axis.initial]));
@@ -126,6 +127,7 @@ export class RelationshipService {
     if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
       throw new TetherError("VALIDATION_FAILED", "Idempotency key is required.", ["idempotencyKey must be non-empty"]);
     }
+    const relationship = this.getRelationshipForScope(context, relationshipId, "relationship:write");
     const idempotencyScope = this.store.idempotencyKey(context.tenantId, relationshipId, idempotencyKey);
     const requestHash = sha256Hex(canonicalJson({ relationshipId, event }));
     const existing = this.store.idempotency.get(idempotencyScope);
@@ -136,7 +138,6 @@ export class RelationshipService {
       return existing.result;
     }
 
-    const relationship = this.getRelationship(context, relationshipId);
     const { after, explanation } = this.projectEvent(relationship, event);
 
     relationship.snapshot = {
@@ -166,7 +167,7 @@ export class RelationshipService {
 
   simulateEvent(context: RequestContext, relationshipId: string, event: RelationshipEventInput): SimulateEventResult {
     requireScope(context, "relationship:read");
-    const relationship = this.getRelationship(context, relationshipId);
+    const relationship = this.getRelationshipForScope(context, relationshipId, "relationship:read");
     const { after, explanation } = this.projectEvent(relationship, event);
     return {
       relationshipId,
@@ -179,13 +180,13 @@ export class RelationshipService {
 
   getExplanation(context: RequestContext, relationshipId: string): RelationshipExplanation | null {
     requireScope(context, "relationship:read");
-    const relationship = this.getRelationship(context, relationshipId);
+    const relationship = this.getRelationshipForScope(context, relationshipId, "relationship:read");
     return relationship.explanations.at(-1) ?? null;
   }
 
   previewDecay(context: RequestContext, relationshipId: string, baselineAt: string): DecayPreview {
     requireScope(context, "relationship:read");
-    const relationship = this.getRelationship(context, relationshipId);
+    const relationship = this.getRelationshipForScope(context, relationshipId, "relationship:read");
     const model = this.getModel(context, relationship.modelId, relationship.modelVersion);
     const elapsedMs = Date.parse(baselineAt) - Date.parse(relationship.snapshot.updatedAt);
     if (!Number.isFinite(elapsedMs)) {
@@ -220,10 +221,19 @@ export class RelationshipService {
   }
 
   getRelationship(context: RequestContext, relationshipId: string): RelationshipRecord {
+    return this.getRelationshipForScope(context, relationshipId, "relationship:read");
+  }
+
+  private getRelationshipForScope(
+    context: RequestContext,
+    relationshipId: string,
+    scope: TetherScope
+  ): RelationshipRecord {
     const relationship = this.store.relationships.get(this.store.relationshipKey(context.tenantId, relationshipId));
     if (relationship === undefined) {
       throw new TetherError("RESOURCE_NOT_FOUND", "Resource was not found.", []);
     }
+    requireRelationshipAccess(context, relationship, scope);
     return relationship;
   }
 
@@ -323,6 +333,26 @@ function requireScope(context: RequestContext | undefined, scope: TetherScope): 
   }
   if (!Array.isArray(context.scopes) || !context.scopes.includes(scope)) {
     throw new TetherError("TENANT_SCOPE_DENIED", "Request cannot access this resource.", []);
+  }
+}
+
+function requireSubjectAccess(context: RequestContext, subjectRef: string, scope: TetherScope): void {
+  requireScope(context, scope);
+  if (!context.subjectRefs?.includes(subjectRef)) {
+    throw new TetherError("RESOURCE_NOT_FOUND", "Resource was not found.", []);
+  }
+}
+
+function requireRelationshipAccess(context: RequestContext, relationship: RelationshipRecord, scope: TetherScope): void {
+  requireScope(context, scope);
+  if (context.actorId === relationship.createdBy || context.subjectRefs?.includes(relationship.subjectRef)) {
+    return;
+  }
+  const delegated = context.relationshipDelegations?.some(
+    (delegation) => delegation.relationshipId === relationship.id && delegation.scopes.includes(scope)
+  );
+  if (!delegated) {
+    throw new TetherError("RESOURCE_NOT_FOUND", "Resource was not found.", []);
   }
 }
 

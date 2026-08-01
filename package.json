@@ -1,6 +1,6 @@
 {
   "name": "@tuzuminami/tether",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Explainable relationship state engine for AI products and interactive systems.",
   "license": "Apache-2.0",
   "type": "module",
@@ -32,6 +32,7 @@
     "check:package-boundary": "node scripts/check-package-boundary.mjs",
     "check:release-docs": "node scripts/check-release-docs.mjs",
     "release:check": "npm run verify && npm run check:release-docs && npm run check:licenses && npm audit --audit-level=high && npm_config_cache=/tmp/tether-npm-cache npm pack --dry-run",
+    "prepare:release-assets": "node scripts/prepare-release-assets.mjs",
     "start": "node apps/api/server.mjs",
     "test": "npm run build && node --test tests/*.test.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",

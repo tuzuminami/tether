@@ -6,19 +6,19 @@ const siteProbePath = "site/.tether-release-docs-probe";
 
 export function validateReleaseDocs({ packageJson, docs, gitignore, npmignore, siteIgnored, packedPaths }) {
   const version = packageJson.version;
-  const expectedStatus = `<!-- tether-release-status: source=v${version}; github=v1.0.0; npm=unpublished; v2=unreleased -->`;
+  const expectedStatus = `<!-- tether-release-status: source=v${version}; github=v${version}; npm=unpublished; v2=released -->`;
 
   check(/^\d+\.\d+\.\d+$/.test(version), "package version must be stable semver");
   for (const doc of docs) {
     check(doc.content.includes(expectedStatus), `${doc.path} must declare source and published release status`);
   }
   check(
-    /latest published GitHub release is\s+v1\.0\.0/i.test(docs.find((doc) => doc.path === "README.md")?.content ?? ""),
+    new RegExp(`current public GitHub release is\\s+v${version.replaceAll(".", "\\.")}`, "i").test(docs.find((doc) => doc.path === "README.md")?.content ?? ""),
     "README must identify the latest published GitHub release"
   );
   check(
-    !docs.some((doc) => presentsUnreleasedSourceAsPublished(doc.content, version)),
-    "documentation must not present an unreleased source contract as published or available"
+    !docs.some((doc) => presentsReleasedSourceAsUnreleased(doc.content, version)),
+    "documentation must not present the released source contract as unreleased"
   );
   check(siteIgnored, ".gitignore must actively ignore the local site workspace");
   check(/^site$/m.test(npmignore), ".npmignore must exclude the local site workspace");
@@ -51,14 +51,14 @@ function gitIgnores(path) {
   }
 }
 
-function presentsUnreleasedSourceAsPublished(markdown, version) {
+function presentsReleasedSourceAsUnreleased(markdown, version) {
   const content = markdown.replace(/\s+/g, " ");
   const escapedVersion = version.replaceAll(".", "\\.");
   const sourceVersion = `v?${escapedVersion}`;
   return [
-    new RegExp(`\\b${sourceVersion}\\b[^.]{0,120}\\b(?:is|was|has been)\\b[^.]{0,80}\\b(?:released|published|available|current|latest|stable|supported)\\b`, "i"),
-    new RegExp(`\\b${sourceVersion}\\b[^.]{0,80}\\b(?:GitHub|npm)\\s+(?:release|package)[^.]{0,80}\\b(?:is|was|has been)\\b[^.]{0,80}\\b(?:released|published|available|current|latest|stable|supported)\\b`, "i"),
-    new RegExp(`\\b(?:current|latest|supported|stable)(?:\\s+\\w+){0,4}\\s*:\\s*(?:TETHER\\s+)?${sourceVersion}\\b`, "i")
+    new RegExp(`\\b${sourceVersion}\\b[^.]{0,120}\\b(?:is|was|remains)\\b[^.]{0,80}\\b(?:unreleased|release-candidate)\\b`, "i"),
+    new RegExp(`\\b${sourceVersion}\\b[^.]{0,120}\\bhas not been released\\b`, "i"),
+    new RegExp(`\\b(?:unreleased|release-candidate)\\b[^.]{0,80}\\b${sourceVersion}\\b`, "i")
   ].some((pattern) => pattern.test(content));
 }
 

@@ -23,8 +23,8 @@ Manual checks:
 - Confirm release notes mention migrations, known limitations, and compatibility impact.
 - Confirm `npm pack --dry-run` contains no private harness, private docs, secrets, or local state.
 
-## TETHER v2.0.0 Compatibility
+## TETHER v2.0.1 Compatibility
 
-<!-- tether-release-status: source=v2.0.0; github=v1.0.0; npm=unpublished; v2=unreleased -->
+<!-- tether-release-status: source=v2.0.1; github=v2.0.1; npm=unpublished; v2=released -->
 
-2.0.0 removes `createDefaultApiRuntime()`, implicit HTTP runtime defaults, and the development bearer-token path. Consumers must configure `TETHER_RUNTIME_STORE`, `TETHER_BIND_HOST`, and `TETHER_AUTH_ADAPTER`; PostgreSQL deployments must also set `DATABASE_URL` and `TETHER_MIGRATE_POSTGRES=1`. Auth adapters must return a tenant matching `X-Tenant-Id`. The `/v1` HTTP routes and JSON Schema validation behavior remain compatible. Confirm production traffic gates use `/ready`; `/health` is liveness-only.
+2.0.0 removes `createDefaultApiRuntime()`, implicit HTTP runtime defaults, and the development bearer-token path. 2.0.1 requires auth adapters to authorize exact subject references or delegated relationship IDs in addition to tenant scopes. Consumers must configure `TETHER_RUNTIME_STORE`, `TETHER_BIND_HOST`, and `TETHER_AUTH_ADAPTER`; PostgreSQL deployments must also set `DATABASE_URL` and `TETHER_MIGRATE_POSTGRES=1`. Auth adapters must return a tenant matching `X-Tenant-Id`. The `/v1` HTTP routes and JSON Schema validation behavior remain compatible. Confirm production traffic gates use `/ready`; `/health` is liveness-only.

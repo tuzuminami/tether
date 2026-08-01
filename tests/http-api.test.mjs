@@ -14,7 +14,7 @@ const testAuthenticator = {
     if (authorization !== "Bearer test-token" || tenantId === undefined) {
       throw new TetherAuthenticationError("invalid_credentials", "Test credential is invalid.");
     }
-    return { tenantId, actorId: "test-actor", scopes: ["model:write", "relationship:write", "relationship:read"], correlationId };
+    return { tenantId, actorId: "test-actor", scopes: ["model:write", "relationship:write", "relationship:read"], subjectRefs: ["subject_hash"], correlationId };
   }
 };
 
@@ -219,6 +219,40 @@ test("TEST-API-010 maps a typed adapter failure by its stable discriminator", as
   );
   assert.equal(response.status, 401);
   assert.equal(response.body.error.code, "AUTHENTICATION_REQUIRED");
+});
+
+test("TEST-API-011 enforces same-tenant subject grants and exact relationship delegations", async () => {
+  const service = createService();
+  const headers = (authorization) => ({ authorization, "x-tenant-id": "tenant_api", "content-type": "application/json" });
+  const authenticator = {
+    authenticate({ authorization, tenantId, correlationId }) {
+      const principal = authorization === "Bearer owner"
+        ? { actorId: "owner", subjectRefs: ["subject_owner"] }
+        : authorization === "Bearer delegated"
+          ? { actorId: "peer", subjectRefs: [], relationshipDelegations: [{ relationshipId: "rel_owner", scopes: ["relationship:read", "relationship:write"] }] }
+          : { actorId: "peer", subjectRefs: [] };
+      return { tenantId, ...principal, scopes: ["model:write", "relationship:write", "relationship:read"], correlationId };
+    }
+  };
+
+  assert.equal((await request(service, "POST", "/v1/models", headers("Bearer owner"), model, authenticator)).status, 201);
+  assert.equal(
+    (await request(service, "POST", "/v1/relationships", headers("Bearer owner"), {
+      id: "rel_owner",
+      modelId: model.id,
+      modelVersion: model.version,
+      subjectRef: "subject_owner"
+    }, authenticator)).status,
+    201
+  );
+  assert.equal((await request(service, "GET", "/v1/relationships/rel_owner/explanation", headers("Bearer peer"), undefined, authenticator)).status, 404);
+  assert.equal(
+    (await request(service, "POST", "/v1/relationships/rel_owner/events", { ...headers("Bearer delegated"), "idempotency-key": "delegated-idem" }, {
+      id: "delegated-event",
+      type: "helpful_interaction"
+    }, authenticator)).status,
+    200
+  );
 });
 
 function createService() {

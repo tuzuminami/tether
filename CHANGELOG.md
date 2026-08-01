@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.1 - 2026-08-01
+
+- Require subject authority or an exact relationship delegation in addition to tenant and operation scopes.
+- Deny unauthorized same-tenant relationship operations without revealing resource existence.
+- Add immutable GitHub release evidence with an installable tarball, checksum, CycloneDX SBOM, provenance, and attestations.
+
 ## 2.0.0 - 2026-07-13
 
 - Wired the PostgreSQL store into the HTTP runtime with verified authentication

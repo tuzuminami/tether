@@ -91,7 +91,7 @@ async function createRuntime(databaseUrl) {
         if (tenantId !== authenticatedTenant) {
           throw new TetherAuthenticationError("tenant_context_denied", "E2E credential cannot access this tenant.");
         }
-        return { tenantId: authenticatedTenant, actorId: `${authenticatedTenant}-actor`, scopes: ["model:write", "relationship:write", "relationship:read"], correlationId };
+        return { tenantId: authenticatedTenant, actorId: `${authenticatedTenant}-actor`, scopes: ["model:write", "relationship:write", "relationship:read"], subjectRefs: [`subject-${authenticatedTenant.slice(-1)}`], correlationId };
       } };
     }
   });
