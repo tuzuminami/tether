@@ -55,6 +55,15 @@ integration("TEST-PG-INT-001 proves PostgreSQL 16 migration, retry, concurrent r
       modelVersion: model.version,
       subjectRef: "subject-a"
     });
+    const peer = { ...tenantA, actorId: "postgres-peer", subjectRefs: [], correlationId: "corr-peer" };
+    await assert.rejects(
+      () => secondService.getExplanation(peer, relationship.id),
+      (error) => error instanceof TetherError && error.code === "RESOURCE_NOT_FOUND"
+    );
+    await assert.rejects(
+      () => secondService.createRelationship(peer, { id: "peer-relationship", modelId: model.id, modelVersion: model.version, subjectRef: "subject-a" }),
+      (error) => error instanceof TetherError && error.code === "RESOURCE_NOT_FOUND"
+    );
     await firstService.createModel(tenantB, model);
     await secondService.createRelationship(tenantB, {
       id: relationship.id,
@@ -89,6 +98,15 @@ integration("TEST-PG-INT-001 proves PostgreSQL 16 migration, retry, concurrent r
     const persisted = await persistedService.getExplanation(tenantA, relationship.id);
     assert.equal(persisted.eventId, event.id);
     assert.equal(persisted.snapshotVersion, 2);
+    const delegated = {
+      ...peer,
+      relationshipDelegations: [{ relationshipId: relationship.id, scopes: ["relationship:read", "relationship:write"] }]
+    };
+    assert.equal(
+      (await persistedService.applyEvent(delegated, relationship.id, { id: "delegated-event", type: "helpful_interaction" }, "delegated-request")).relationship.snapshot.version,
+      3
+    );
+    assert.equal((await persistedService.getExplanation(delegated, relationship.id)).eventId, "delegated-event");
 
     const duplicateOutbox = (await verificationPool.query("SELECT id FROM tether_outbox_events LIMIT 1")).rows[0].id;
     await assert.rejects(
@@ -189,7 +207,7 @@ function storeFor(schema) {
 }
 
 function context(tenantId) {
-  return { tenantId, actorId: "postgres-test-actor", scopes: ["model:write", "relationship:write", "relationship:read"], correlationId: `corr-${tenantId}` };
+  return { tenantId, actorId: "postgres-test-actor", scopes: ["model:write", "relationship:write", "relationship:read"], subjectRefs: ["subject-a", "subject-b", "subject:legacy", "subject-rolled-back"], correlationId: `corr-${tenantId}` };
 }
 
 function fixedOptions(prefix) {

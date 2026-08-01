@@ -4,15 +4,15 @@ import { existsSync, mkdirSync, readFileSync, rmSync, rmdirSync, writeFileSync }
 import test from "node:test";
 import { validateReleaseDocs } from "../scripts/check-release-docs.mjs";
 
-const status = "<!-- tether-release-status: source=v2.0.0; github=v1.0.0; npm=unpublished; v2=unreleased -->";
+const status = "<!-- tether-release-status: source=v2.0.1; github=v2.0.1; npm=unpublished; v2=released -->";
 const docs = (readme) => [
   { path: "README.md", content: `${status}\n${readme}` },
-  { path: "docs/OPERATIONS.md", content: `${status}\nTETHER v2.0.0 is unreleased source deployment contract.` },
-  { path: "docs/RELEASE.md", content: `${status}\nTETHER v2.0.0 compatibility.` }
+  { path: "docs/OPERATIONS.md", content: `${status}\nTETHER v2.0.1 deployment contract.` },
+  { path: "docs/RELEASE.md", content: `${status}\nTETHER v2.0.1 compatibility.` }
 ];
 const base = (overrides = {}) => ({
-  packageJson: { version: "2.0.0", files: ["dist"] },
-  docs: docs("The latest published GitHub release is v1.0.0. v2.0.0 has not been released."),
+  packageJson: { version: "2.0.1", files: ["dist"] },
+  docs: docs("The current public GitHub release is v2.0.1."),
   gitignore: "/site/\n",
   npmignore: "site\n",
   siteIgnored: true,
@@ -20,24 +20,24 @@ const base = (overrides = {}) => ({
   ...overrides
 });
 
-test("release documentation permits an unreleased source contract with an explicit published release", () => {
+test("release documentation permits an explicit released source contract", () => {
   assert.doesNotThrow(() => validateReleaseDocs(base()));
 });
 
-test("release documentation rejects an unreleased source contract presented as public", () => {
+test("release documentation rejects a released source contract presented as unreleased", () => {
   assert.throws(
-    () => validateReleaseDocs(base({ docs: docs("TETHER v2.0.0 is the supported public release.") })),
-    /must identify the latest published GitHub release|must not present an unreleased source contract/
+    () => validateReleaseDocs(base({ docs: docs("The current public GitHub release is v2.0.1. TETHER v2.0.1 has not been released.") })),
+    /must not present the released source contract as unreleased/
   );
 });
 
-test("release documentation rejects alternate unreleased source publication claims", () => {
+test("release documentation rejects alternate unreleased source claims", () => {
   for (const claim of [
-    "The latest published GitHub release is v1.0.0. v2.0.0 GitHub release is now available.",
-    "The latest published GitHub release is v1.0.0. TETHER v2.0.0 is the current stable release.",
-    "The latest published GitHub release is v1.0.0. TETHER 2.0.0 has been published to npm."
+    "The current public GitHub release is v2.0.1. v2.0.1 has not been released.",
+    "The current public GitHub release is v2.0.1. TETHER v2.0.1 remains unreleased.",
+    "The current public GitHub release is v2.0.1. TETHER 2.0.1 is an unreleased source contract."
   ]) {
-    assert.throws(() => validateReleaseDocs(base({ docs: docs(claim) })), /must not present an unreleased source contract/);
+    assert.throws(() => validateReleaseDocs(base({ docs: docs(claim) })), /must not present the released source contract as unreleased/);
   }
 });
 

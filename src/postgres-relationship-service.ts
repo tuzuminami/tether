@@ -56,6 +56,7 @@ export class PostgresRelationshipService {
     const modelId = requiredString(input, "modelId");
     const modelVersion = requiredString(input, "modelVersion");
     const subjectRef = requiredString(input, "subjectRef");
+    requireSubjectAccess(context, subjectRef, "relationship:write");
     const model = await this.getModel(context, modelId, modelVersion);
     const now = this.now();
     const relationship: RelationshipRecord = {
@@ -94,7 +95,7 @@ export class PostgresRelationshipService {
     if (typeof idempotencyKey !== "string" || idempotencyKey.length === 0) {
       throw new TetherError("VALIDATION_FAILED", "Idempotency key is required.", ["idempotencyKey must be non-empty"]);
     }
-    const relationship = await this.getRelationship(context, relationshipId);
+    const relationship = await this.getRelationship(context, relationshipId, "relationship:write");
     const { after, explanation } = await this.projectEvent(relationship, event);
     const updated: RelationshipRecord = {
       ...relationship,
@@ -129,7 +130,7 @@ export class PostgresRelationshipService {
 
   async simulateEvent(context: RequestContext, relationshipId: string, event: RelationshipEventInput): Promise<SimulateEventResult> {
     requireScope(context, "relationship:read");
-    const relationship = await this.getRelationship(context, relationshipId);
+    const relationship = await this.getRelationship(context, relationshipId, "relationship:read");
     const { after, explanation } = await this.projectEvent(relationship, event);
     return {
       relationshipId,
@@ -142,12 +143,12 @@ export class PostgresRelationshipService {
 
   async getExplanation(context: RequestContext, relationshipId: string): Promise<RelationshipExplanation | null> {
     requireScope(context, "relationship:read");
-    return (await this.getRelationship(context, relationshipId)).explanations.at(-1) ?? null;
+    return (await this.getRelationship(context, relationshipId, "relationship:read")).explanations.at(-1) ?? null;
   }
 
   async previewDecay(context: RequestContext, relationshipId: string, baselineAt: string): Promise<DecayPreview> {
     requireScope(context, "relationship:read");
-    const relationship = await this.getRelationship(context, relationshipId);
+    const relationship = await this.getRelationship(context, relationshipId, "relationship:read");
     const model = await this.getModel(context, relationship.modelId, relationship.modelVersion);
     const elapsedMs = Date.parse(baselineAt) - Date.parse(relationship.snapshot.updatedAt);
     if (!Number.isFinite(elapsedMs)) {
@@ -171,9 +172,14 @@ export class PostgresRelationshipService {
     return model;
   }
 
-  private async getRelationship(context: RequestContext, relationshipId: string): Promise<RelationshipRecord> {
+  private async getRelationship(
+    context: RequestContext,
+    relationshipId: string,
+    scope: TetherScope
+  ): Promise<RelationshipRecord> {
     const relationship = await this.store.getRelationship(context.tenantId, relationshipId);
     if (relationship === null) throw new TetherError("RESOURCE_NOT_FOUND", "Resource was not found.", []);
+    requireRelationshipAccess(context, relationship, scope);
     return relationship;
   }
 
@@ -215,6 +221,16 @@ export class PostgresRelationshipService {
 function requireScope(context: RequestContext | undefined, scope: TetherScope): void {
   if (context === undefined || typeof context.tenantId !== "string" || typeof context.actorId !== "string") throw new TetherError("AUTHENTICATION_REQUIRED", "Authentication is required.", []);
   if (!Array.isArray(context.scopes) || !context.scopes.includes(scope)) throw new TetherError("TENANT_SCOPE_DENIED", "Request cannot access this resource.", []);
+}
+function requireSubjectAccess(context: RequestContext, subjectRef: string, scope: TetherScope): void {
+  requireScope(context, scope);
+  if (!context.subjectRefs?.includes(subjectRef)) throw new TetherError("RESOURCE_NOT_FOUND", "Resource was not found.", []);
+}
+function requireRelationshipAccess(context: RequestContext, relationship: RelationshipRecord, scope: TetherScope): void {
+  requireScope(context, scope);
+  if (context.actorId === relationship.createdBy || context.subjectRefs?.includes(relationship.subjectRef)) return;
+  const delegated = context.relationshipDelegations?.some((delegation) => delegation.relationshipId === relationship.id && delegation.scopes.includes(scope));
+  if (!delegated) throw new TetherError("RESOURCE_NOT_FOUND", "Resource was not found.", []);
 }
 function optionalString(input: unknown, key: string): string | undefined {
   if (typeof input !== "object" || input === null || Array.isArray(input)) throw new TetherError("VALIDATION_FAILED", `${key} must be a non-empty string.`, []);

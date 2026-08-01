@@ -1,11 +1,10 @@
 # TETHER Operations
 
-<!-- tether-release-status: source=v2.0.0; github=v1.0.0; npm=unpublished; v2=unreleased -->
+<!-- tether-release-status: source=v2.0.1; github=v2.0.1; npm=unpublished; v2=released -->
 
-This document describes the unreleased v2.0.0 source deployment contract. The latest
-published GitHub release is v1.0.0, so do not present these settings as a published v2
-runtime until the v2 tag and release exist. Retain the migration guidance in the README
-and release checklist when upgrading from v1.
+This document describes the released v2.0.1 deployment contract. The package remains
+unpublished to npm. Retain the migration guidance in the README and release checklist
+when upgrading from v1.
 
 ## Runtime Modes
 
@@ -18,7 +17,7 @@ The packaged HTTP API runtime uses in-memory state for deterministic development
 - `TETHER_RUNTIME_STORE=memory`: deterministic development runtime.
 - `TETHER_RUNTIME_STORE=postgres`: durable runtime; requires `DATABASE_URL`, `TETHER_MIGRATE_POSTGRES=1`, and `TETHER_AUTH_ADAPTER`.
 
-Server startup fails closed when `TETHER_RUNTIME_STORE`, `TETHER_BIND_HOST`, or `TETHER_AUTH_ADAPTER` is missing. In `NODE_ENV=production`, memory runtime, skipped migration readiness, and a missing auth adapter are rejected. The auth adapter is an ES module exporting `authenticateTetherRequest({ authorization, tenantId, correlationId })`; it must return a verified tenant-scoped request context.
+Server startup fails closed when `TETHER_RUNTIME_STORE`, `TETHER_BIND_HOST`, or `TETHER_AUTH_ADAPTER` is missing. In `NODE_ENV=production`, memory runtime, skipped migration readiness, and a missing auth adapter are rejected. The auth adapter is an ES module exporting `authenticateTetherRequest({ authorization, tenantId, correlationId })`; it must return a verified tenant-scoped request context with exact `subjectRefs` and, when needed, `relationshipDelegations`. A caller without a matching subject grant, creator identity, or exact relationship delegation receives a non-enumerating `404`.
 
 The Compose demo adapter is local/CI-only and tenant-fixed to `tenant_smoke`: `Bearer tether-compose-demo` with any other `X-Tenant-Id` fails authentication. `docker compose up --wait` waits for both the PostgreSQL and API healthchecks; the API healthcheck uses `GET /ready`.
 

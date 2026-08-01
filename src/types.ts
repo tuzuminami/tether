@@ -12,10 +12,19 @@ export type TetherErrorCode =
 
 export type TetherScope = "model:write" | "relationship:write" | "relationship:read";
 
+export interface RelationshipDelegation {
+  relationshipId: string;
+  scopes: TetherScope[];
+}
+
 export interface RequestContext {
   tenantId: string;
   actorId: string;
   scopes: TetherScope[];
+  /** Subject references the authenticated principal may create or access. */
+  subjectRefs?: string[];
+  /** Exact relationship grants for principals that are not the creator or subject. */
+  relationshipDelegations?: RelationshipDelegation[];
   correlationId: string;
 }
 

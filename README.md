@@ -56,13 +56,11 @@ It models relationship state as explicit versioned data: axes, bounded values, d
 
 ## Release Status
 
-<!-- tether-release-status: source=v2.0.0; github=v1.0.0; npm=unpublished; v2=unreleased -->
+<!-- tether-release-status: source=v2.0.1; github=v2.0.1; npm=unpublished; v2=released -->
 
-The source contract in this branch is v2.0.0. The latest published GitHub release is
-v1.0.0; v2.0.0 has not been released on GitHub or published to npm yet. Treat the v2
-documentation as a source and release-candidate contract until its tag and release are
-published. The package and HTTP contracts follow semantic versioning; incompatible runtime
-or API changes require a new major release and a documented migration path.
+The current public GitHub release is v2.0.1. The package is not published to npm. The package
+and HTTP contracts follow semantic versioning; incompatible runtime or API changes require a
+new major release and a documented migration path.
 
 ## Current Capabilities
 
@@ -185,7 +183,7 @@ await store.migrate();
 
 `PostgresRelationshipStore` uses the same checked-out PostgreSQL client for each `BEGIN` / `COMMIT` / `ROLLBACK` block, and stores relationship updates, idempotency records, audit events, and outbox events in one transaction. Migrations take a transaction-scoped advisory lock and record an immutable version/checksum ledger; an unknown or changed applied migration stops startup. Call `await store.close()` during shutdown.
 
-For a durable runtime, `TETHER_RUNTIME_STORE=postgres` requires `TETHER_MIGRATE_POSTGRES=1`, `DATABASE_URL`, and `TETHER_AUTH_ADAPTER`. The auth adapter is an ES module exporting `authenticateTetherRequest({ authorization, tenantId, correlationId })`, which must return a verified `{ tenantId, actorId, scopes, correlationId }` context. Adapters must throw `TetherAuthenticationError("invalid_credentials", ...)` for missing or invalid credentials (HTTP 401), and `TetherAuthenticationError("tenant_context_denied", ...)` for an authenticated identity that cannot use the requested tenant (HTTP 403). Any other adapter failure is an HTTP 503 dependency failure.
+For a durable runtime, `TETHER_RUNTIME_STORE=postgres` requires `TETHER_MIGRATE_POSTGRES=1`, `DATABASE_URL`, and `TETHER_AUTH_ADAPTER`. The auth adapter is an ES module exporting `authenticateTetherRequest({ authorization, tenantId, correlationId })`, which must return a verified `{ tenantId, actorId, scopes, subjectRefs, relationshipDelegations, correlationId }` context. `subjectRefs` contains the exact subject references the principal may create or access. A principal can also access one named relationship through `relationshipDelegations: [{ relationshipId, scopes }]`. Existing relationships remain available to their creator. Missing subject authority or a matching delegation returns `404`, including for same-tenant callers. Adapters must throw `TetherAuthenticationError("invalid_credentials", ...)` for missing or invalid credentials (HTTP 401), and `TetherAuthenticationError("tenant_context_denied", ...)` for an authenticated identity that cannot use the requested tenant (HTTP 403). Any other adapter failure is an HTTP 503 dependency failure.
 
 ```bash
 TETHER_RUNTIME_STORE=postgres \
@@ -266,7 +264,14 @@ export async function authenticateTetherRequest({ authorization, tenantId, corre
   const identity = await verifyCredential(authorization); // application-owned verification
   if (identity === undefined) throw new TetherAuthenticationError("invalid_credentials", "Credential is invalid.");
   if (identity.tenantId !== tenantId) throw new TetherAuthenticationError("tenant_context_denied", "Tenant access is denied.");
-  return { tenantId, actorId: identity.actorId, scopes: identity.scopes, correlationId };
+  return {
+    tenantId,
+    actorId: identity.actorId,
+    scopes: identity.scopes,
+    subjectRefs: identity.subjectRefs,
+    relationshipDelegations: identity.relationshipDelegations,
+    correlationId
+  };
 }
 ```
 

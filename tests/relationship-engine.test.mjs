@@ -7,7 +7,7 @@ import {
 } from "../dist/index.js";
 
 function createTestContext(overrides = {}) {
-  return { tenantId: "tenant_test", actorId: "actor_test", scopes: ["model:write", "relationship:write", "relationship:read"], correlationId: "corr_test", ...overrides };
+  return { tenantId: "tenant_test", actorId: "actor_test", scopes: ["model:write", "relationship:write", "relationship:read"], subjectRefs: ["subject_hash_demo"], correlationId: "corr_test", ...overrides };
 }
 
 const model = {
@@ -210,8 +210,8 @@ test("TEST-TETHER-006 rejects out-of-range models and clamps event transitions",
 
 test("TEST-TETHER-007 keeps delimiter-bearing tenant, resource, and idempotency keys isolated", () => {
   const { store, service } = createService();
-  const left = createTestContext({ tenantId: "tenant:one" });
-  const right = createTestContext({ tenantId: "tenant" });
+  const left = createTestContext({ tenantId: "tenant:one", subjectRefs: ["left"] });
+  const right = createTestContext({ tenantId: "tenant", subjectRefs: ["right"] });
   const leftModel = { ...model, id: "model", version: "v1" };
   const rightModel = { ...model, id: "one:model", version: "v1" };
 
@@ -230,4 +230,42 @@ test("TEST-TETHER-007 keeps delimiter-bearing tenant, resource, and idempotency 
   assert.equal(service.getRelationship(right, "one:rel").subjectRef, "right");
   assert.equal(service.applyEvent(left, "rel", { id: "event-left", type: "helpful_interaction" }, "event:idem"), leftResult);
   assert.equal(service.applyEvent(right, "one:rel", { id: "event-right", type: "helpful_interaction" }, "idem"), rightResult);
+});
+
+test("TEST-TETHER-008 requires subject ownership or an exact relationship delegation", () => {
+  const { service } = createService();
+  const owner = createTestContext({ actorId: "owner", subjectRefs: ["subject_owner"] });
+  service.createModel(owner, model);
+  service.createRelationship(owner, {
+    id: "rel_owner",
+    modelId: model.id,
+    modelVersion: model.version,
+    subjectRef: "subject_owner"
+  });
+  const peer = createTestContext({ actorId: "peer", subjectRefs: [] });
+
+  for (const action of [
+    () => service.getRelationship(peer, "rel_owner"),
+    () => service.getExplanation(peer, "rel_owner"),
+    () => service.simulateEvent(peer, "rel_owner", { id: "peer-sim", type: "helpful_interaction" }),
+    () => service.previewDecay(peer, "rel_owner", "2026-07-06T00:00:00.000Z"),
+    () => service.applyEvent(peer, "rel_owner", { id: "peer-event", type: "helpful_interaction" }, "peer-idem")
+  ]) {
+    assert.throws(action, (error) => error instanceof TetherError && error.code === "RESOURCE_NOT_FOUND");
+  }
+  assert.throws(
+    () => service.createRelationship(peer, { id: "rel_peer", modelId: model.id, modelVersion: model.version, subjectRef: "subject_owner" }),
+    (error) => error instanceof TetherError && error.code === "RESOURCE_NOT_FOUND"
+  );
+
+  const delegated = createTestContext({
+    actorId: "peer",
+    subjectRefs: [],
+    relationshipDelegations: [{ relationshipId: "rel_owner", scopes: ["relationship:read", "relationship:write"] }]
+  });
+  assert.equal(
+    service.applyEvent(delegated, "rel_owner", { id: "delegated-event", type: "helpful_interaction" }, "delegated-idem").relationship.snapshot.version,
+    2
+  );
+  assert.equal(service.getExplanation(delegated, "rel_owner")?.eventId, "delegated-event");
 });

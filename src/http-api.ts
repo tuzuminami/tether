@@ -353,7 +353,19 @@ function isVerifiedRequestContext(value: unknown, tenantId: string): value is Re
     && value.actorId.length > 0
     && Array.isArray(value.scopes)
     && value.scopes.every((scope) => typeof scope === "string")
+    && (value.subjectRefs === undefined || (Array.isArray(value.subjectRefs) && value.subjectRefs.every((subjectRef) => typeof subjectRef === "string" && subjectRef.length > 0)))
+    && (value.relationshipDelegations === undefined || validRelationshipDelegations(value.relationshipDelegations))
     && typeof value.correlationId === "string";
+}
+
+function validRelationshipDelegations(value: unknown): boolean {
+  return Array.isArray(value) && value.every(
+    (delegation) => isRecord(delegation)
+      && typeof delegation.relationshipId === "string"
+      && delegation.relationshipId.length > 0
+      && Array.isArray(delegation.scopes)
+      && delegation.scopes.every((scope) => typeof scope === "string")
+  );
 }
 
 function isAuthenticationFailure(error: unknown): error is { failure: TetherAuthenticationFailure } {

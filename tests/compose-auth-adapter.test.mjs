@@ -6,7 +6,7 @@ import { authenticateTetherRequest } from "../examples/compose-auth-adapter.mjs"
 test("TEST-COMPOSE-AUTH-001 fixes the demo credential to its documented tenant", () => {
   assert.deepEqual(
     authenticateTetherRequest({ authorization: "Bearer tether-compose-demo", tenantId: "tenant_smoke", correlationId: "corr-compose" }),
-    { tenantId: "tenant_smoke", actorId: "compose-smoke-actor", scopes: ["model:write", "relationship:write", "relationship:read"], correlationId: "corr-compose" }
+    { tenantId: "tenant_smoke", actorId: "compose-smoke-actor", scopes: ["model:write", "relationship:write", "relationship:read"], subjectRefs: ["subject_hash_smoke"], correlationId: "corr-compose" }
   );
   assert.throws(
     () => authenticateTetherRequest({ authorization: "Bearer tether-compose-demo", tenantId: "another-tenant", correlationId: "corr-compose" }),
